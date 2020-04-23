@@ -35,3 +35,16 @@ A1：测量服务器从buffer中取出第一个包，获取时间，
 A2：取出第二个包，获取时间
 B：iperf服务器从buffer中取出背景流量，获取时间
 事件顺序为：A1-B-A2
+
+sudo tcpdump -i enp3s0 "src 192.168.0.8 and dst port 11106" > snd.pcap
+tcpdump的结果都是17us
+
+./run.sh --capacity 100 --traffic 90 --rate 10 --filename c100t90r10.txt
+./run.sh --capacity 100 --traffic 80 --rate 10 --filename c100t80r10.txt
+./run.sh --capacity 100 --traffic 70 --rate 10 --filename c100t70r10.txt
+./run.sh --capacity 100 --traffic 60 --rate 10 --filename c100t60r10.txt
+./run.sh --capacity 100 --traffic 50 --rate 10 --filename c100t50r10.txt
+./run.sh --capacity 100 --traffic 40 --rate 10 --filename c100t40r10.txt
+./run.sh --capacity 100 --traffic 30 --rate 10 --filename c100t30r10.txt
+./run.sh --capacity 100 --traffic 20 --rate 10 --filename c100t20r10.txt
+./run.sh --capacity 100 --traffic 10 --rate 10 --filename c100t10r10.txt

@@ -21,7 +21,7 @@
     服务器通过TCP发送结果
 */
 #define MAX_PACKET_NUMBER (1000)
-int port = 11106, packet_size = 1472, packet_pair_number = 100;
+int port = 11106, packet_size = 1472, packet_pair_number = 1000;
 int tcp_server = -1, tcp_client = -1, udp_server=-1, udp_client=-1; // socket fd
 int conn_fd = -1; // the return fd of accept(tcp_server)
 sockaddr_in client_addr, server_addr;

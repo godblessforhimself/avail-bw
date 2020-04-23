@@ -14,8 +14,8 @@
     客户端发送UDP包，服务器接收UDP包
     服务器通过TCP发送结果
 */
-int port = 11106, packet_size = 1472, packet_pair_number = 100;
-int probing_rate = 0, link_capacity = 0;
+int port = 11106, packet_size = 1472, packet_pair_number = 1000;
+int probing_rate = 1, link_capacity = 100;
 FILE *timestamp_file = NULL;
 char server_ip_str[16], client_ip_str[16];
 unsigned int server_ip, client_ip;
@@ -182,11 +182,11 @@ int send_on_udp() {
         *((int*)msg_buf) = i;
         send_size += sendto(udp_client, msg_buf, packet_size, 0, (sockaddr*)&server_addr, sizeof(server_addr));
         get_time(start_times+i);
-        ret = clock_nanosleep(CLOCK_TAI, 0, &gap_in_pair, NULL);
+        /*ret = clock_nanosleep(CLOCK_TAI, 0, &gap_in_pair, NULL);
         if (ret) {
             printf("Nanosleep 1 failed\n");
             return -2;
-        }
+        }*/
         send_size += sendto(udp_client, msg_buf, packet_size, 0, (sockaddr*)&server_addr, sizeof(server_addr));
         get_time(finish_times+i);
         ret = clock_nanosleep(CLOCK_TAI, 0, &gap_between_pair, NULL);

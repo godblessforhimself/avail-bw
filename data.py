@@ -32,14 +32,22 @@ def get_std(arr,mi,ma):
 def get_gaps(a):
     send_gaps=a[1]-a[0]
     recv_gaps=a[3]-a[2]
-    return send_gaps,recv_gaps
+    return send_gaps,np.sort(recv_gaps)
 
-def analyse_array(a,s,multiple=1e6):
-    print('{},base={}\nmean:{}\nmin:{}\nmax:{}\n'.format(s,multiple,a.mean()*multiple,a.min()*multiple,a.max()*multiple))
+def analyse_array(a,s,f,multiple=1e6):
+    b=a[a>f]*multiple
+    print('{},base={}\nmean:{}\tmin:{}\tmax:{}\tlen:{}\n'.format(s,multiple,b.mean(),b.min(),b.max(), len(b)))
+
+def analyse_file(fname):
+    _,rg=get_gaps(read_file(fname))
+    analyse_array(rg,fname,120e-6)
+    return rg
 
 if __name__=='__main__':
-    ret=read_file('build/timestamp.txt')
-    send_gaps,recv_gaps=get_gaps(ret)
-    analyse_array(send_gaps,'send_gaps')
-    analyse_array(recv_gaps,'recv_gaps')
+    for i in range(10,100,10):
+        fname='build/c100t{}r10.txt'.format(i)
+        rg=analyse_file(fname)
+        rg=rg*1e6
+        np.savetxt('build/{}.txt'.format(i), rg, fmt='%3.2f')
+
     code.interact(local=dict(globals(),**locals()))

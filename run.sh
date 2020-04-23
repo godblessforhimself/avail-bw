@@ -6,21 +6,19 @@ usage(){
     printf "\t%s\n" \
     "-c [capacity]          set capacity of tight link" \
     "-b [cross-traffic]     set cross-traffic that passes tight link" \
-    #"-g [gap-value]         set gap-value of probing packets" \
     "-r [probing-rate]      set probing-rate" \
     "-d                     clear previous jobs." \
     "-M                     clean an make." \
     "-log [file]            set log filename" \
     "example:" \
-    "./run.sh -c 50 -b 25 -r 1 or ./run.sh --capacity 50 --traffic 25 --rate 1" \
+    "./run.sh -c 50 -b 25 -r 10 or ./run.sh --capacity 100 --traffic 50 --rate 10 --filename c100t50r10.txt" \
     "./run.sh -d or ./run.sh --stop" \
-    "./run.sh -M or ./run.sh --make"
+    "./run.sh -M or ./run.sh --make --log log.txt"
     exit
 }
-SHORT=c:b:r:log:dM
-LONG=capacity:,traffic:,rate:,stop,make,log:
-SIMPLE_LOG=1
-DETAILED_LOG=1
+SHORT=c:b:r:l:dMf:
+LONG=capacity:,traffic:,rate:,stop,make,log:,filename:
+FILENAME="timestamp.txt"
 print_args(){
     if [ -z "${CAPACITY}" ]; then
         printf "Capacity not set\n"
@@ -46,7 +44,11 @@ parse_args(){
     while true
     do
     case "$1" in
-        -log | --log )
+        -f | --filename )
+            FILENAME="$2"
+            shift 2
+            ;;
+        -l | --log )
             DETAILED_LOG="$2"
             shift 2
             ;;
@@ -76,18 +78,25 @@ parse_args(){
             exit
             ;;
         -M | --make )
-            quick_make
-            exit
+            MAKE_MODE=1
+            shift 1
             ;;
         -- )
             # parse finish
             break
             ;;
         * )
+            printf "Unknown args\n"
             usage
             ;;
     esac
     done
+    if [ -z ${MAKE_MODE} ]; then
+        :
+    else
+        quick_make
+        exit
+    fi
     print_args
     if [[ $? -eq 1 ]]; then
         usage
@@ -110,7 +119,6 @@ parse_args(){
     else
         :
     fi
-    1>${SIMPLE_LOG} && 2>&1
 }
 get_buffersize(){
     BUFFERSIZE=`expr ${CAPACITY} \* 50`
@@ -121,10 +129,8 @@ USERNAME="root"
 set_capacity(){
     get_buffersize
     printf "Setting up capacity ..."
-    1>>${DETAILED_LOG} && 2>&1
     ssh -l ${USERNAME} -o StrictHostKeyChecking=no ${IP} \
     "tc qdisc del dev enp2s0 handle ffff: ingress; tc qdisc add dev enp2s0 handle ffff: ingress; tc filter add dev enp2s0 parent ffff: handle 800::800 u32 match u32 0 0 action police rate ${CAPACITY}mbit burst ${BUFFERSIZE}k mtu 1500 conform-exceed drop; tc filter show dev enp2s0 parent ffff: handle 800::800;"
-    1>${SIMPLE_LOG} && 2>&1
     printf "... finished.\n"
     if [ $? -ne 0 ]; then
         printf "Set capacity failed\n"
@@ -135,7 +141,6 @@ IP2="192.168.0.16"
 USERNAME2="tonyold"
 set_cross_traffic(){
     printf "Setting up cross traffic ..."
-    1>>${DETAILED_LOG} && 2>&1
     if [ ${TRAFFIC} -eq 0 ]; then
         return 0
     fi
@@ -143,7 +148,6 @@ set_cross_traffic(){
     "pkill iperf3; nohup iperf3 -s > ~/iperfserver.log 2>/dev/null &"
     ssh -l ${USERNAME2} -o StrictHostKeyChecking=no ${IP2} \
     "pkill iperf3; nohup iperf3 -c ${IP} -u -b ${TRAFFIC}M -t 300 > ~/iperfclient.log 2>/dev/null &"
-    1>${SIMPLE_LOG} && 2>&1
     printf "... finished.\n"
     if [ $? -ne 0 ]; then
         printf "Set cross traffic failed\n"
@@ -154,13 +158,11 @@ SERVER_PATH="~/avail-tools/simple-testbed/build"
 CLIENT_PATH="/home/tony/Downloads/avail-tools/simple-testbed/build"
 start_probing(){
     printf "Start probing ..."
-    1>>${DETAILED_LOG} && 2>&1
     ssh -l ${USERNAME} -o StrictHostKeyChecking=no ${IP} \
     "pkill avail-server; nohup ${SERVER_PATH}/avail-server > ${SERVER_PATH}log.txt 2>&1 &"
     pkill avail-client;
     #nohup ${CLIENT_PATH}/avail-client -c ${CAPACITY} -r ${RATE} -o ${CLIENT_PATH}/timestamp.txt ${IP} > ${CLIENT_PATH}/log.txt 2>&1 &
-    ${CLIENT_PATH}/avail-client -c ${CAPACITY} -r ${RATE} -o ${CLIENT_PATH}/timestamp.txt ${IP}
-    1>${SIMPLE_LOG} && 2>&1
+    ${CLIENT_PATH}/avail-client -c ${CAPACITY} -r ${RATE} -o ${CLIENT_PATH}/${FILENAME} ${IP}
     printf "... finished.\n"
     if [ $? -ne 0 ]; then
         printf "Start probing failed\n"
@@ -169,11 +171,9 @@ start_probing(){
 }
 clear_all(){
     printf "Start clearing ..."
-    1>>${DETAILED_LOG} && 2>&1
     ssh -l ${USERNAME} -o StrictHostKeyChecking=no ${IP} "pkill iperf3; pkill avail-server"
     ssh -l ${USERNAME2} -o StrictHostKeyChecking=no ${IP2} "pkill iperf3"
     pkill avail-client
-    1>${SIMPLE_LOG} && 2>&1
     printf "... finished.\n"
     if [ $? -ne 0 ]; then
         printf "Clear failed\n"
@@ -184,23 +184,21 @@ SERVER_PROJ="/root/avail-tools/simple-testbed"
 CLIENT_PROJ="/home/tony/Downloads/avail-tools/simple-testbed"
 quick_make(){
     printf "Quick clean and make ..."
-    1>>${DETAILED_LOG} && 2>&1
-    cd $CLIENT_PATH && make clean && rm -f CMakeCache.txt && cmake ../ && make
+    cd $CLIENT_PATH && make clean && rm -f CMakeCache.txt && cmake ../ 1>/dev/null && make 1>/dev/null
     if [ $? -ne 0 ]; then
         printf "Client remake failed.\n"
         exit
     fi
-    scp -r $CLIENT_PROJ/* ${USERNAME}@${IP}:${SERVER_PROJ}
+    scp -r $CLIENT_PROJ/* ${USERNAME}@${IP}:${SERVER_PROJ} 1>/dev/null
     if [ $? -ne 0 ]; then
         printf "Source code transmission failed.\n"
         exit
     fi
-    ssh -l ${USERNAME} -o StrictHostKeyChecking=no ${IP} "cd ${SERVER_PROJ}/build && make clean && rm -f CMakeCache.txt && cmake ../ && make"
+    ssh -l ${USERNAME} -o StrictHostKeyChecking=no ${IP} "cd ${SERVER_PROJ}/build && make clean && rm -f CMakeCache.txt && cmake ../ && make" 1>/dev/null 2>/dev/null
     if [ $? -ne 0 ]; then
         printf "Server remake failed.\n"
         exit
     fi
-    1>${SIMPLE_LOG} && 2>&1
     printf "... finished.\n"
 }
 main(){
