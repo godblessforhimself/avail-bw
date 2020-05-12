@@ -14,3 +14,6 @@ SET(CMAKE_CXX_FLAGS_RELEASE "$ENV{CXXFLAGS} -O3 -Wall")
 # add the executable
 add_executable(avail-client client.cpp utils.h utils.cpp)
 add_executable(avail-server server.cpp)
+add_executable(fake-client fakeclient.cpp utils.h utils.cpp)
+add_executable(hw-server hardware.c)
+add_executable(hw-client hardware.c)

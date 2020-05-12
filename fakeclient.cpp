@@ -17,7 +17,6 @@
 */
 int port = 11106, packet_size = 1472, packet_continous_count = 2, packet_pair_number = 1000, packet_total_count = 0;
 double probing_rate = 1;
-FILE *timestamp_file = NULL;
 char server_ip_str[16], client_ip_str[16];
 unsigned int server_ip, client_ip;
 int tcp_client=-1, udp_client=-1;
@@ -38,9 +37,6 @@ void Usage() {
 	printf("dst_address     can be either an IP address\n");
     printf("example: ./avail-client -C 5 -L 100 -R 10.0 -o f.txt 10.10.114.21\n\n");
 	exit(1);
-}
-int get_time(timespec *ts) {
-    return clock_gettime(CLOCK_TAI, ts);
 }
 int parse_args(int argc, char *argv[]) {
     /* 
@@ -64,9 +60,6 @@ int parse_args(int argc, char *argv[]) {
                 port = atoi(optarg);
                 break;
             case 'o':
-                if ((timestamp_file = fopen(optarg, "w")) == NULL) {
-                    printf("open file %s fail.\n", optarg);
-                }
                 break;
             case '?':
                 printf("Parse arg optopt: %c\n", optopt);
@@ -207,10 +200,7 @@ int send_on_udp() {
     int ret, index = 0;
     for (int i = 0; i < packet_pair_number; i++) {
         for (int j = 0; j < packet_continous_count; j++) {
-            *((int*)msg_buf) = index;
             send_size += sendto(udp_client, msg_buf, packet_size, 0, (sockaddr*)&server_addr, sizeof(server_addr));
-            get_time(timestamps+index);
-            index++;
         }
         ret = clock_nanosleep(CLOCK_TAI, 0, &gap_between_pair, NULL);
         if (ret) {
@@ -219,12 +209,6 @@ int send_on_udp() {
         }
     }
     printf("Total send %ld bytes, expected %d bytes\n", send_size, packet_total_count * packet_size);
-    if (timestamp_file != NULL) {
-        char text_buffer[21*packet_total_count + 1], *tmp = text_buffer; 
-        memset(text_buffer, 0, sizeof(text_buffer));
-        tmp = timespec2str(tmp, timestamps, packet_total_count);
-        fprintf(timestamp_file, "%s", text_buffer);
-    }
     return 0;
 }
 
@@ -268,34 +252,6 @@ int rcv_on_tcp() {
             timestamps[i] = report_buffer[i].timestamp;
             sequence_number[i] = report_buffer[i].sequence_number;
         }
-        if (timestamp_file != NULL) {
-            char text_buffer[packet_total_count*(21+6) + 1], *tmp = text_buffer;
-            memset(text_buffer, 0, sizeof(text_buffer));
-            tmp = timespec2str(tmp, timestamps, packet_total_count);
-            tmp = int2str(tmp, sequence_number, packet_total_count);
-            fprintf(timestamp_file, "%s", text_buffer);
-        }
-    } else {
-        server_report_short report_buffer[packet_total_count]; 
-        timespec_short timestamps[packet_total_count];
-        int sequence_number[packet_total_count];
-        memset(report_buffer, 0, sizeof(report_buffer));
-        ssize_t recv_size = recv(tcp_client, report_buffer, sizeof(report_buffer), 0);
-        if (recv_size != (ssize_t)sizeof(report_buffer)) {
-            printf("Recv %ld bytes < expected %lu bytes\n", recv_size, sizeof(report_buffer));
-        } else
-            printf("Recv %ld bytes from server\n", recv_size);
-        for (int i = 0; i < packet_total_count; i++) {
-            timestamps[i] = report_buffer[i].timestamp;
-            sequence_number[i] = report_buffer[i].sequence_number;
-        }
-        if (timestamp_file != NULL) {
-            char text_buffer[packet_total_count*(21+6) + 1], *tmp = text_buffer;
-            memset(text_buffer, 0, sizeof(text_buffer));
-            tmp = timespec2str(tmp, timestamps, packet_total_count);
-            tmp = int2str(tmp, sequence_number, packet_total_count);
-            fprintf(timestamp_file, "%s", text_buffer);
-        }
     }
     return 0;
 }
@@ -306,8 +262,6 @@ int close_all() {
     */
     close(tcp_client);
     close(udp_client);
-    if (timestamp_file != NULL)
-        fclose(timestamp_file);
     return 0;
 }
 int main(int argc, char *argv[]) {

@@ -20,14 +20,14 @@
     客户端发送UDP包，服务器接收UDP包
     服务器通过TCP发送结果
 */
-#define MAX_PACKET_NUMBER (1000)
-int port = 11106, packet_size = 1472, packet_pair_number = 1000;
+#define MAX_PACKET_NUMBER (100000)
+int port = 11106, packet_size = 1472, packet_continous_count = 2, packet_pair_number = 1000, packet_total_count = 0;
 int tcp_server = -1, tcp_client = -1, udp_server=-1, udp_client=-1; // socket fd
 int conn_fd = -1; // the return fd of accept(tcp_server)
 sockaddr_in client_addr, server_addr;
-char msg_buf[4096], expected_buf[4096];
-int sequence_number[MAX_PACKET_NUMBER], packet_valid[MAX_PACKET_NUMBER];
-timespec start_times[MAX_PACKET_NUMBER], finish_times[MAX_PACKET_NUMBER];
+char msg_buf[4096];
+int sequence_number[MAX_PACKET_NUMBER];
+timespec timestamps[MAX_PACKET_NUMBER];
 int parse_args(int argc, char *argv[]) {
     /* 
         0正常，1异常
@@ -98,15 +98,35 @@ int wait_connection() {
     if (send_size != (ssize_t)sizeof(int)) {
         return -1;
     }
-    udp_server = socket(AF_INET, SOCK_DGRAM, 0);
+    // 等待客户端发送packet_continous_count, packet_pair_number
+    memset(msg_buf, 0, sizeof(msg_buf));
+    ssize_t recv_size = recv(conn_fd, msg_buf, 2*sizeof(int), 0);
+    if (recv_size != 2*sizeof(int)) {
+        return -2;
+    }
+    packet_continous_count = *(int*)msg_buf;
+    packet_pair_number = *((int*)msg_buf + 1);
+    packet_total_count = packet_continous_count * packet_pair_number;
+    printf("Client continous_count %d, pair count %d\n", packet_continous_count, packet_pair_number);
+    if (packet_pair_number <= 0 || packet_continous_count <= 0) {
+        return -3;
+    }
+    udp_server = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     int optval = 1;
     if (setsockopt(udp_server, SOL_SOCKET, SO_REUSEADDR, (const void*)&optval, sizeof(int)) == -1) {
         printf("Set reuse error\n");
-        return -2;
+        return -4;
+    }
+    timeval timeout;
+    timeout.tv_sec = 1;
+    timeout.tv_usec = 0;
+    if (setsockopt(udp_server, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout, sizeof(timeout)) < 0) {
+        printf("Set Recv timeout error %d\n", errno);
+        return -6;
     }
     if (bind(udp_server, (sockaddr*)&server_addr, sizeof(server_addr))) {
         printf("Bind error %d\n", errno);
-        return -2;
+        return -5;
     }
     return 0;
 }
@@ -122,21 +142,17 @@ int rcv_on_udp() {
         sequence_number
         packet_valid
     */
-    memset(msg_buf, 0, sizeof(msg_buf)); memset(expected_buf, 0, sizeof(expected_buf)); memset(packet_valid, 0, sizeof(packet_valid));
+    memset(msg_buf, 0, sizeof(msg_buf));
     socklen_t cli_len = sizeof(client_addr);
     ssize_t recv_size = 0, recv_tmp;
-    printf("Waiting UDP packets\n");
-    for (int i = 0; i < packet_pair_number; i++) {
+    printf("Waiting %d UDP packets\n", packet_total_count);
+    for (int i = 0; i < packet_total_count; i++) {
         recv_tmp = recvfrom(udp_server, msg_buf, packet_size, 0, (sockaddr*)&client_addr, &cli_len);
-        get_time(start_times+i);
-        if (recv_tmp == -1) {
-            printf("Recv errno %d\n", errno);
-        } else
-            recv_size += recv_tmp;
-        recv_tmp = recvfrom(udp_server, msg_buf, packet_size, 0, (sockaddr*)&client_addr, &cli_len);
-        get_time(finish_times+i);
-        if (recv_tmp == -1) {
-            printf("Recv errno %d\n", errno);
+        get_time(timestamps+i);
+        if (recv_tmp <= 0) {
+            printf("Recv errno %d, rs %ld\n", errno, recv_tmp);
+            printf("Only recv %ld bytes, current i %d\n", recv_size, i);
+            return -1;
         } else
             recv_size += recv_tmp;
         sequence_number[i] = *(int*)msg_buf;
@@ -149,9 +165,9 @@ int rcv_on_udp() {
     return 0;
 }
 struct server_report {
-    timespec start, finish;
+    timespec timestamp;
     int sequence_number;
-    int set(timespec s, timespec f, int sn) {start = s; finish = f; sequence_number = sn; return 0;}
+    int set(timespec ts, int sn) {timestamp = ts; sequence_number = sn; return 0;}
 };
 int send_on_tcp() {
     /*
@@ -159,10 +175,10 @@ int send_on_tcp() {
         send 
 
     */
-    server_report report_buffer[packet_pair_number];
+    server_report report_buffer[packet_total_count];
     memset(report_buffer, 0, sizeof(report_buffer));
-    for (int i = 0; i < packet_pair_number; i++) {
-        report_buffer[i].set(start_times[i], finish_times[i], sequence_number[i]);
+    for (int i = 0; i < packet_total_count; i++) {
+        report_buffer[i].set(timestamps[i], sequence_number[i]);
     }
     ssize_t send_size = send(conn_fd, report_buffer, sizeof(report_buffer), 0);
     #ifdef ENVIRONMENT64
@@ -186,11 +202,16 @@ int main(int argc, char *argv[]) {
     if (init_sock()) {
         return -1;
     } else {
-        while (wait_connection() == 0) {
+        if (wait_connection() == 0) {
+        //while (wait_connection() == 0) {
             if (rcv_on_udp()) {
+                printf("Rcv on udp failed\n");
+                close_all();
                 return -2;
             } else {
                 if (send_on_tcp()) {
+                    printf("Send on tcp failed\n");
+                    close_all();
                     return -3;
                 } else {
                     close_all();

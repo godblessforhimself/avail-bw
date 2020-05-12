@@ -15,22 +15,16 @@ import pandas as pd
 import scipy as sp
 import matplotlib.pyplot as plt
 import code,os,time
-#预处理，PAIR_COUNT SAMPLE，并以us为单位1
-#1. 相邻时间戳作差，P-1个值
-#2. 以第一个时间戳为0点，P-1个值
-#是否检测异常点并去除？
-#箱型图、describe
-#send timestamp是否有用：样本CONTINOUS_COUNT,2
-#capacity已知，相同capacity为一类，输出是ct的数值或one-hot向量，表示概率
-#capacity未知，训练两个模型，第一个输出capacity，第二个输出ct
 #训练集、测试集划分：十次十折交叉验证
 #训练方法XGBoost、RandomForest、ANN、Logistic Regression、LightGBM
 DIR_NAME='data'
-EXPERIMENT_COUNT=1
+EXPERIMENT_COUNT=2
 CONTINIOUS_COUNT=10
 PAIR_COUNT=1000
 def read_raw_data(ex_count):
+    t1=time.time()
     X,Y=[],[]
+    incomplete_count,wrong_order_count=0,0
     for filename in os.listdir(DIR_NAME):
         link=int(filename[4:filename.find('load')])
         load=int(filename[filename.find('load')+4:filename.find('exp')])
@@ -39,21 +33,24 @@ def read_raw_data(ex_count):
             continue
         full_path=DIR_NAME+'/'+filename
         wrong_order,send_time,recv_time=read_raw_file(full_path)
-        if wrong_order!=-1:
-            print(filename,wrong_order)
-            exit
-        #x.shape Pair,Continous,2
+        if wrong_order>=0:
+            wrong_order_count+=1
+            continue
+        elif wrong_order==-2:
+            incomplete_count+=1
+            continue
         x=np.transpose(np.array([send_time,recv_time]).reshape((2,PAIR_COUNT,CONTINIOUS_COUNT)), (1,2,0))
         if len(X)==0:
             X=x
         else:
             X=np.append(X,x,axis=0)
-        #y.shape Pair,2
         y=np.tile([link,load],PAIR_COUNT).reshape(PAIR_COUNT,2)
         if len(Y)==0:
             Y=y
         else:
             Y=np.append(Y,y,axis=0)
+    t2=time.time()
+    print('read raw data uses {} seconds, incomplete {}, wrong order {}'.format(t2-t1, incomplete_count, wrong_order_count))
     return X,Y
 def line2float64(line):
     return np.array([np.float64(i) for i in line.split(',') if i!=''])
@@ -67,44 +64,26 @@ def check_order(sequence_number):
 def read_raw_file(filename):
     with open(filename,'r') as f:
         lines=f.read().split('\n')
+    if len(lines)<3:
+        return -2,None,None
     send_time,recv_time,sequence_number=line2float64(lines[0]),line2float64(lines[1]),line2int32(lines[2])
     wrong_order=check_order(sequence_number)
     if wrong_order==-1:
         return -1,send_time,recv_time
     else:
         return wrong_order,send_time,recv_time
-def get_diff_data(X,scale=1e6):
+def get_diff_data(X):
     # X.shape is pair,continious,2
-    diffX=(X[:,1:,:]-X[:,:-1,:])*scale
+    diffX=(X[:,1:,:]-X[:,:-1,:])
     return diffX
-
 # preprocessor
+def standard(X):
+    return StandardScaler().fit_transform(X)
 def rescale(Y):
     a=sorted(list(set(Y)))
     transform={v:i for i,v in enumerate(a)}
     y=np.vectorize(transform.get)(Y)
     return y
-
-def preprocessor_multiclass(X,Y):
-    x=X.reshape(X.shape[0],-1)
-    sc=StandardScaler()
-    x=sc.fit_transform(x)
-    y=rescale(Y)
-    y=to_categorical(y)
-    return x,y
-def preprocessor_value(X,Y):
-    x=X.reshape(X.shape[0],-1)
-    sc=StandardScaler()
-    x=sc.fit_transform(x)
-    y=Y
-    return x,y
-def standard_preprocessor(X,Y):
-    x=X.reshape(X.shape[0],-1)
-    sc=StandardScaler()
-    x=sc.fit_transform(x)
-    y=Y
-    return x,y
-
 # training methods
 def get_args(key,value,kargs):
     if kargs:
@@ -130,7 +109,6 @@ def logistic_regression(xtrain,xtest,ytrain,ytest,kargs):
     clf=LogisticRegression(random_state=random_state,solver=solver,max_iter=max_iter,multi_class=multi_class,verbose=verbose,penalty=penalty,n_jobs=n_jobs).fit(xtrain, ytrain)
     accuracy=clf.score(xtest, ytest)
     return accuracy
-
 def lightgbm_method(xtrain,xtest,ytrain,ytest,kargs):
     lgb_train=lgb.Dataset(xtrain, ytrain)
     lgb_eval=lgb.Dataset(xtest, ytest, reference=lgb_train)
@@ -154,7 +132,6 @@ def lightgbm_method(xtrain,xtest,ytrain,ytest,kargs):
     preds=np.argmax(preds,axis=1).reshape(ytest.shape)
     accuracy=np.mean(preds==ytest)
     return accuracy
-
 def xgboost_method(xtrain,xtest,ytrain,ytest,kargs):
     dtrain,dtest=xgb.DMatrix(xtrain,label=ytrain),xgb.DMatrix(xtest,label=ytest)
     param={
@@ -168,13 +145,10 @@ def xgboost_method(xtrain,xtest,ytrain,ytest,kargs):
     param=get_args_dict(param,kargs)
     num_round=get_args('num_round',100,kargs)
     early_stopping_rounds=get_args('early_stopping_rounds',20,kargs)
-    dump_model=get_args('dump_model','xgb_model.txt',kargs)
     bst = xgb.train(param,dtrain,num_boost_round=num_round,early_stopping_rounds=early_stopping_rounds,evals=[(dtest,"Test")],verbose_eval=False)
-    bst.dump_model(dump_model)
-    preds = bst.predict(dtest)
-    best_preds = np.asarray([np.argmax(line) for line in preds])
+    preds=bst.predict(dtest)
+    best_preds=np.asarray([np.argmax(line) for line in preds])
     return precision_score(ytest, best_preds, average='macro')
-
 def keras_method(xtrain,xtest,ytrain,ytest,kargs):
     inshape=get_args('inshape',xtrain.shape[1],kargs)
     layer_num1=get_args('layer_num1',256,kargs)
@@ -196,8 +170,7 @@ def keras_method(xtrain,xtest,ytrain,ytest,kargs):
     elif train_type=='regression':
         model.add(Dense(1))
         model.compile(optimizer='sgd',loss='mae',metrics=['mae','mean_absolute_percentage_error','mean_squared_logarithmic_error'])
-    es=EarlyStopping(monitor='accuracy',patience=50,verbose=0,mode='max')
-    model.fit(xtrain,ytrain,epochs=epochs,batch_size=batch_size,validation_split=0.1,shuffle=True,verbose=verbose,callbacks=[es],use_multiprocessing=True)
+    model.fit(xtrain,ytrain,epochs=epochs,batch_size=batch_size,validation_split=0.1,shuffle=True,verbose=verbose,use_multiprocessing=True)
     preds=model.predict(xtest)
     if train_type=='multiclass':
         preds_=np.argmax(preds,axis=1)
@@ -206,7 +179,6 @@ def keras_method(xtrain,xtest,ytrain,ytest,kargs):
     elif train_type=='regression':
         accuracy=np.mean(np.abs(preds-ytest))
     return accuracy
-
 # abstract function
 def run_method(X,Y,preprocessor,splitor,training_method,kargs):
     if preprocessor!=None:
@@ -224,25 +196,19 @@ def run_method(X,Y,preprocessor,splitor,training_method,kargs):
         acc_=training_method(xtrain,xtest,ytrain,ytest,kargs)
         acc+=acc_
         i+=1
-        #break
+        break
     acc/=i
     t2=time.time()
     print('{} takes {} s, acc {}'.format(training_method.__name__,t2-t1,acc))
     return acc,t2-t1
-
 def shuffle_data(X,Y):
     rng = np.random.default_rng(seed=0)
     indices=np.arange(X.shape[0])
     rng.shuffle(indices)
     return X[indices], Y[indices]
-
-def exp1(X,Y):
+def exp(X,Y):
     n_sample=X.shape[0]
-    n_feature=X.shape[1]
-    sendtime,recvtime=X[:,:,0],X[:,:,1]
-    link,load=Y[:,0],Y[:,1]
-    y=rescale(link)
-    n_outshape=len(set(y))
+    n_outshape=len(set(Y))
     kfold_splitor=KFold(n_splits=10,shuffle=True,random_state=0)
     method_list=['logistic_regression','lightgbm','xgboost','keras_ann']
     methods={
@@ -281,7 +247,6 @@ def exp1(X,Y):
             'verbosity':0,
             'objective':'multi:softprob',
             'num_class':n_outshape,
-            'dump_model':'dump_model.txt',
             'num_round':100,
             'early_stopping_rounds':10,
             'tree_method':'auto'
@@ -290,162 +255,47 @@ def exp1(X,Y):
             'outshape':n_outshape,
             'layer_num1':128,
             'layer_num2':256,
-            'epochs':400,
-            'batch_size':100,
+            'epochs':200,
+            'batch_size':200,
             'train_type':'multiclass',
-            'verbose':0
+            'verbose':1
         }
     }
-    acc_list=[]
-    time_list=[]
-    #use sendtime
-    acc_row=[]
-    time_row=[]
-    x=sendtime
-    for method_name in method_list:
-        acc,t=run_method(x,y,standard_preprocessor,kfold_splitor,methods[method_name],kargs[method_name])
-        acc_row.append(acc)
-        time_row.append(t)
-    acc_list.append(acc_row)
-    time_list.append(time_row)
-    #use recvtime
-    acc_row=[]
-    time_row=[]
-    x==recvtime
-    for method_name in method_list:
-        acc,t=run_method(x,y,standard_preprocessor,kfold_splitor,methods[method_name],kargs[method_name])
-        acc_row.append(acc)
-        time_row.append(t)
-    acc_list.append(acc_row)
-    time_list.append(time_row)
+    #method_list=['keras_ann']
     #use sendtime,recvtime
     acc_row=[]
     time_row=[]
-    x=np.zeros((n_sample,n_feature*2))
-    x[:,:n_feature]=sendtime
-    x[:,n_feature:2*n_feature]=recvtime
+    #sendtime=X.reshape((n_sample,2,CONTINIOUS_COUNT-1))[:,0,:]
+    recvtime=X.reshape((n_sample,2,CONTINIOUS_COUNT-1))[:,1,:]
+    X=standard(recvtime)
     for method_name in method_list:
-        acc,t=run_method(x,y,standard_preprocessor,kfold_splitor,methods[method_name],kargs[method_name])
+        acc,t=run_method(X,Y,None,kfold_splitor,methods[method_name],kargs[method_name])
         acc_row.append(acc)
         time_row.append(t)
-    acc_list.append(acc_row)
-    time_list.append(time_row)
-    rowname=['sendtime','recvtime','sendtime&recvtime']
-    acc_df=pd.DataFrame(data=acc_list,index=rowname,columns=method_list)
-    time_df=pd.DataFrame(data=time_list,index=rowname,columns=method_list)
-    acc_df.to_csv('acc_predict_link.csv')
-    time_df.to_csv('time_cost_predict_link.csv')
-
-def exp2(X,Y):
-    n_sample=X.shape[0]
-    n_feature=X.shape[1]
-    sendtime,recvtime=X[:,:,0],X[:,:,1]
-    link,load=Y[:,0],Y[:,1]
-    y=yprocessor(load)
-    n_outshape=len(set(y))
-    kfold_splitor=KFold(n_splits=10,shuffle=True,random_state=0)
-    method_list=['logistic_regression','lightgbm','xgboost','keras_ann']
-    methods={
-        method_list[0]: logistic_regression,
-        method_list[1]: lightgbm_method,
-        method_list[2]: xgboost_method,
-        method_list[3]: keras_method
-    }
-    kargs={
-        method_list[0]: {
-            'random_state':0,
-            'solver':'lbfgs',
-            'max_iter': 100,
-            'multi_class':'multinomial',
-            'verbose': 0,
-            'penalty': 'none',
-            'n_jobs':-1
-        },
-        method_list[1]: {
-            'boosting_type': 'gbdt',
-            'objective': 'multiclass',
-            'metric': 'multi_logloss',
-            'num_class': n_outshape,
-            'num_leaves': 15,
-            'learning_rate': 0.05,
-            'feature_fraction': 0.9,
-            'bagging_fraction': 0.9,
-            'bagging_freq': 1,
-            'verbose': -1,
-            'num_boost_round': 100,
-            'early_stopping_rounds': 10
-        },
-        method_list[2]: {
-            'max_depth':6,
-            'eta':0.3,
-            'verbosity':0,
-            'objective':'multi:softprob',
-            'num_class':n_outshape,
-            'dump_model':'dump_model.txt',
-            'num_round':100,
-            'early_stopping_rounds':10,
-            'tree_method':'auto'
-        },
-        method_list[3]: {
-            'outshape':n_outshape,
-            'layer_num1':128,
-            'layer_num2':256,
-            'epochs':400,
-            'batch_size':100,
-            'train_type':'multiclass',
-            'verbose':0
-        }
-    }
-    acc_list=[]
-    time_list=[]
-    #use sendtime,link
-    acc_row=[]
-    time_row=[]
-    x=np.zeros((n_sample,n_feature+1))
-    x[:,:-1]=sendtime
-    x[:,-1]=link
-    for method_name in method_list:
-        acc,t=run_method(x,y,standard_preprocessor,kfold_splitor,methods[method_name],kargs[method_name])
-        acc_row.append(acc)
-        time_row.append(t)
-    acc_list.append(acc_row)
-    time_list.append(time_row)
-    #use recvtime,link
-    acc_row=[]
-    time_row=[]
-    x=np.zeros((n_sample,n_feature+1))
-    x[:,:-1]=recvtime
-    x[:,-1]=link
-    for method_name in method_list:
-        acc,t=run_method(x,y,standard_preprocessor,kfold_splitor,methods[method_name],kargs[method_name])
-        acc_row.append(acc)
-        time_row.append(t)
-    acc_list.append(acc_row)
-    time_list.append(time_row)
-    #use sendtime,recvtime,link
-    acc_row=[]
-    time_row=[]
-    x=np.zeros((n_sample,n_feature*2+1))
-    x[:,:n_feature]=sendtime
-    x[:,n_feature:2*n_feature]=recvtime
-    x[:,-1]=link
-    for method_name in method_list:
-        acc,t=run_method(x,y,standard_preprocessor,kfold_splitor,methods[method_name],kargs[method_name])
-        acc_row.append(acc)
-        time_row.append(t)
-    acc_list.append(acc_row)
-    time_list.append(time_row)
-    rowname=['sendtime&link','recvtime&link','sendtime&recvtime&link']
-    acc_df=pd.DataFrame(data=acc_list,index=rowname,columns=method_list)
-    time_df=pd.DataFrame(data=time_list,index=rowname,columns=method_list)
-    acc_df.to_csv('acc_predict_load.csv')
-    time_df.to_csv('time_cost_predict_load.csv')
+    for i in range(len(method_list)):
+        print('method {} use {} seconds, acc {}'.format(method_list[i],time_row[i],acc_row[i]))
+    
+def filter_data(X,load,centers,allow_width):
+    n_sample=load.shape[0]
+    n_center=centers.shape[0]
+    abs_center=np.abs(np.repeat(load,n_center).reshape((n_sample,n_center))-centers).reshape((n_sample,n_center))
+    label=np.argmin(abs_center, axis=1)
+    valid=np.min(abs_center,axis=1)<=allow_width
+    x=X[valid]
+    y=label[valid]
+    return x,y
     
 if __name__=='__main__':
-    
     X,Y=read_raw_data(EXPERIMENT_COUNT)
-    dX=get_diff_data(X)
-    #dX,Y=shuffle_data(dX,Y)
-    #exp1(dX,Y)
-    #exp2(dX,Y)
-    #code.interact(local=dict(globals(),**locals()))
+    load=Y[:,1]
+    centers=np.array([i for i in range(50,851,100)])
+    allow_width=0
+    s1=Y.shape[0]
+    X,Y=filter_data(X,load,centers,allow_width)
+    s2=Y.shape[0]
+    X=get_diff_data(X)
+    X,Y=shuffle_data(X,Y)
+    Y=rescale(Y)
+    exp(X,Y)
+    print('original size {}'.format(s1))
+    print('filtered size {}'.format(s2))

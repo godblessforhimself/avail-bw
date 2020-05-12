@@ -1,1 +1,9 @@
 build/*
+data/
+experiment_record.txt
+*.png
+*.ipynb
+*.csv
+*.pcap
+*.txt
+__pycache__/
