@@ -1,0 +1,1 @@
+rsync -avz liqing@10.10.114.19:/home/liqing/avail-bw/data/ data
