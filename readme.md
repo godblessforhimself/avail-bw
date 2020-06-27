@@ -1,3 +1,50 @@
+#### 带宽测量
+1. 变长分组
+Pathchar，Pchar
+2. 数据包对
+Bprobe、Sprobe、Capprobe
+3. SLoPS
+Spruce,Pipechar,pathneck
+#### 各种因素
+Iperf3
+设置UDP包大小，避免分包(UDP包拆分消耗CPU资源、增大丢包率)
+设置pacing-timer 10us-100us
+
+高速网卡
+gso和tso：使用iperf3测量链路带宽时，用tcp能测至10000Mbps，tso降低了cpu的负载 (为什么gso对udp无效-没有显著降低cpu负载)
+硬件时间戳支持：可能支持硬件时间戳，但不能每个包都获取硬件时间戳
+
+应用层send
+每次send至少需要c的时间，则最大探测速率为MTU+28/c，
+如果其间发生了进程切换，实际探测速率会更低
+send只是将数据提交到skb中，实际需要等网卡发送
+#### exp9 pathload效果测评
+6.22
+修改pathload_snd_fun里发送包间隔的时间
+pathload发包间隔控制——偏大，导致实际速率一直小于目标速率
+pathload没能正确估计链路容量
+pathload估计了send recv平均时延、MTU、最小包间隔、最大发送速率等链路参数，
+send平均时延：发送端调用一次send需要的时间
+recv平均时延：接收端调用一次recv需要的时间
+最小包间隔：2*Max(send,recv)
+最大发送速率：(MTU+28)/最小包间隔
+
+发送速率控制：
+t1-send-t2-select(sleep_time)-while
+tm_remaining=80us-14us=66us
+sleep_tm_usec = tm_remaining - (tm_remaining%min_timer_intr)-min_timer_intr<200?2*min_timer_intr:min_timer_intr;
+min_sleep_interval：sleep 1us需要的时间 = 60us
+tm：min_sleep_interval+min_sleep_interval/4  75us
+min_timer_intr：sleep tm微秒需要的时间-min_sleep_interval  75us
+
+150+60=240us
+检测context switch、interrupt_coalescence
+#### 6.15 包大小实验总结
+
+因为tc的burst必须大于9KB，因此小包的前几个包的间隔会显著的小
+7%：包含tc的影响——9000B相对1500B的提升
+20%：消除了tc影响——9000B相对1500B的提升
+-10%：仅使用接收时间的降低
 
 #### 6.8 包大小的作用
 实验一：使用9000B的包是否提升了测量效果？

@@ -1,6 +1,7 @@
 #!/bin/bash
 # author: tony
 # SRC是探测源，DST是接收端，TRAFFIC是流量产生源
+# iperf3粒度太大、带宽控制存在问题
 IP_DST="192.168.1.21"
 IP_SRC="192.168.0.19"
 IP_TRAFFIC="192.168.0.20"

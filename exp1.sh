@@ -1,6 +1,9 @@
 #!/bin/bash
 # author: tony
 # SRC是探测源，DST是接收端，TRAFFIC是流量产生源
+# 没有通过软路由
+# iperf3以1ms粒度发包
+
 IP_DST="10.10.114.21"
 IP_SRC="10.10.114.19"
 IP_TRAFFIC="10.10.114.20" 

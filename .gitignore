@@ -7,3 +7,5 @@ experiment_record.txt
 *.pcap
 *.txt
 __pycache__/
+.vscode/
+main

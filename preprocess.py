@@ -1,5 +1,5 @@
 import argparse
-import time,code
+import time,code,re,os
 import numpy as np
 import pandas as pd
 """
@@ -29,6 +29,35 @@ import pandas as pd
         output:
             (n_sample,1001)
                 (send_duration,recv_duration,difftime[999]), unit= us
+    format6/7:
+        python preprocess.py -m format5 -o data/link100load0packetsize1500exp6.txt link100load0packetsize1500exp6.txt
+        python preprocess.py -m format5 -o data/link100load90packetsize1500exp6.txt link100load90packetsize1500exp6.txt
+        python preprocess.py -m format5 -o data/link100load0packetsize9000exp6.txt link100load0packetsize9000exp6.txt
+        python preprocess.py -m format5 -o data/link100load90packetsize9000exp6.txt link100load90packetsize9000exp6.txt
+        python preprocess.py -m format5 -o data/link100load45.0packetsize1500exp6test.txt link100load45.0packetsize1500exp6test.txt
+
+        python preprocess.py -m format5 -o data/link100load0packetsize1500exp7.txt link100load0packetsize1500exp7.txt
+        python preprocess.py -m format5 -o data/link100load1packetsize1500exp7.txt link100load1packetsize1500exp7.txt
+        python preprocess.py -m format5 -o data/link100load2packetsize1500exp7.txt link100load2packetsize1500exp7.txt
+        python preprocess.py -m format5 -o data/link100load3packetsize1500exp7.txt link100load3packetsize1500exp7.txt
+        python preprocess.py -m format5 -o data/link100load4packetsize1500exp7.txt link100load4packetsize1500exp7.txt
+        python preprocess.py -m format5 -o data/link100load5packetsize1500exp7.txt link100load5packetsize1500exp7.txt
+        python preprocess.py -m format5 -o data/link100load50packetsize1500exp7.txt link100load50packetsize1500exp7.txt
+
+        python preprocess.py -m format5 -o data/link100load0packetsize3000exp7.txt link100load0packetsize3000exp7.txt
+        python preprocess.py -m format5 -o data/link100load1packetsize3000exp7.txt link100load1packetsize3000exp7.txt
+        python preprocess.py -m format5 -o data/link100load2packetsize3000exp7.txt link100load2packetsize3000exp7.txt
+        python preprocess.py -m format5 -o data/link100load3packetsize3000exp7.txt link100load3packetsize3000exp7.txt
+        python preprocess.py -m format5 -o data/link100load4packetsize3000exp7.txt link100load4packetsize3000exp7.txt
+        python preprocess.py -m format5 -o data/link100load5packetsize3000exp7.txt link100load5packetsize3000exp7.txt
+        python preprocess.py -m format5 -o data/link100load50packetsize3000exp7.txt link100load50packetsize3000exp7.txt
+
+
+        python preprocess.py -m format5 -o data/link100load0.0packetsize1500exp7test1.txt link100load0.0packetsize1500exp7test1.txt
+
+
+    peek:
+        python preprocess.py -m peek -o temp/regex_file.txt temp/peek_result.txt
 
     format_tcpdump: python preprocess.py -m format_tcpdump -o traffic.csv timestamps_out2.txt
         查看进入路由器的时间 tcpdump
@@ -36,7 +65,7 @@ import pandas as pd
 """
 def cmd():
     args=argparse.ArgumentParser(description='Data process')
-    args.add_argument('-m',"--mode",type=str,help='data process mode',default='format1',choices=['format1','format4','format5','format_tcpdump'])
+    args.add_argument('-m',"--mode",type=str,help='data process mode',default='format1',choices=['format1','format4','format5','format_tcpdump','peek'])
     args.add_argument("-o","--filelist",type=str,help="filename list",nargs='*')
     args=args.parse_args()
     return args
@@ -44,6 +73,11 @@ def line2floats(line):
     return np.array([np.float64(i) for i in line.split(',')])
 def lines2floatsmatrix(lines):
     return np.array([line2floats(line) for line in lines])
+def transform_data(data):
+    dt=data[:,2:]-data[:,1:-1]
+    st=(data[:,0]).reshape((-1,1))
+    rt=(data[:,-1]-data[:,1]).reshape((-1,1))
+    return np.concatenate((st,rt,dt),axis=1)
 def format_data(fin,fout,with_sum=True):
     with open(fin,'r') as f:
         lines=f.read().split('\n')
@@ -102,10 +136,37 @@ def format_tcpdump(fin,fout):
     recv_duration=(mtx[:,-1]-mtx[:,0]).reshape((-1,1))
     output_data=np.concatenate((recv_duration,dt),axis=1)*1e6
     np.savetxt(fout,output_data,fmt='%6.0f',delimiter=' ')
+def list_formatter(a,form):
+    return ' '.join(form.format(i) for i in a)
+def peek_files(fin,fout):
+    f=open(fin,'r')
+    fo=open(fout,'w')
+    lines=f.read().split('\n')
+    f.close()
+    filelist=[]
+    prefix=''
+    for line in lines:
+        if line!='' and line[0]!='^':
+            filelist=os.listdir(line)
+            prefix=line
+        elif line!='' and line[0]=='^':
+            if prefix=='':
+                print('peek_files Error: {}'.format(line))
+            pattern=re.compile(line)
+            for filename in filelist:
+                if pattern.match(filename):
+                    data=read_file(prefix+filename)
+                    data=transform_data(data)*1e6
+                    avg=np.mean(data,axis=0)
+                    fo.write('{} {}\n'.format(prefix,filename))
+                    fo.write(list_formatter(avg,'{:.2f}')+'\n')
+    fo.close()
+    
 if __name__=="__main__":
     t1=time.time()
     args=cmd()
-    fin,fout=args.filelist[0],args.filelist[1]
+    if len(args.filelist)==2:
+        fin,fout=args.filelist[0],args.filelist[1]
     if args.mode=='format1':
         format_data(args.filelist[0], args.filelist[1])
     elif args.mode=='format4':
@@ -114,5 +175,7 @@ if __name__=="__main__":
         format_5(args.filelist[0],args.filelist[1])
     elif args.mode=='format_tcpdump':
         format_tcpdump(fin,fout)
+    elif args.mode=='peek':
+        peek_files(fin,fout)
     t2=time.time()
     print('it takes {} seconds'.format(t2-t1))

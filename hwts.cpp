@@ -62,12 +62,6 @@ int read_control_message(int fd, int mode = 0) {
     }
     return recv_sum != target;
 }
-double judge_valid(timespec *t) {
-    int ns = t->tv_nsec;
-    double us = ns / 1e3;
-    double expected = 8 * udp_packet_count * (udp_packet_size + 68) / 1e4;
-    return (double)(us) / expected;
-}
 int parse_args(int argc, char *argv[]) {
     const char *opt_string = "M:P:S:L:p:O:C:R:B:";
     int ret;
@@ -123,16 +117,14 @@ int parse_args(int argc, char *argv[]) {
         server_addr.sin_addr.s_addr = inet_addr(server_ip_str);
         server_addr.sin_family = AF_INET;
         server_addr.sin_port = htons(server_tcp_listen_port);
-        long ns_sum = (8 * long(1e3) * udp_packet_size * udp_packet_count / udp_packet_rate), ns_packet = ns_sum, sec_packet = 0;
+        long ns_sum = (8 * long(1e3) * (udp_packet_size + 28) * udp_packet_count / udp_packet_rate), ns_packet = ns_sum, sec_packet = 0;
         if (ns_sum >= long(1e9)) {
             ns_packet = ns_sum % (long)(1e9);
             sec_packet = ns_sum / (long)(1e9);
         }    
         udp_packet_period.tv_nsec = ns_packet;
         udp_packet_period.tv_sec = sec_packet;
-        epoll_wait_ms = int(udp_packet_size * udp_packet_count / (125 * link_speed));
-        if (epoll_wait_ms == 0)
-            epoll_wait_ms = 1;
+        epoll_wait_ms = 2 * int((udp_packet_size + 28) * udp_packet_count / (125 * link_speed) + 1);
         printf("间隔时间 %ld.%09lds, 列车时间 %dms\n", sec_packet, ns_packet, epoll_wait_ms);
     }
     if (savefile) {
@@ -445,6 +437,9 @@ int server_main() {
     }
     return 0;
 }
+void log_error(const char *hint) {
+    printf("%s. Error: %s\n", hint, strerror(errno));
+}
 /*
     Client Code
     tcp connect
@@ -454,9 +449,11 @@ int server_main() {
 int client_tcp_connect() {
     client_tcp_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (client_tcp_fd == -1) {
+        log_error("socket init failed");
         return -1;
     }
     if (connect(client_tcp_fd, (sockaddr*)&server_addr, sizeof(sockaddr_in))) {
+        log_error("socket connect failed");
         return -4;
     }
     return 0;
@@ -483,7 +480,7 @@ int client_udp_send() {
         msg_flags: 0
     };
     /*
-        唯首尾包接收时间戳，设置首尾包选项
+        开启首尾包接收时间戳
     */
     __u32 options = SOF_TIMESTAMPING_TX_SOFTWARE;
     union {
