@@ -20,6 +20,7 @@ ip link set [interface] promisc on
 ip a show [interface] | grep -i promisc
 sudo sysctl net.ipv4.ip_forward=1
 sudo tcpdump -i enp61s0f1 -nN 'src host 192.168.0.19 and dst host 192.168.0.21'
+sudo tcpdump -i enp96s0f1 -nN 'host 192.168.2.7 and not port 22'
 启用硬件时间戳：部分有效
 sudo hwstamp_ctl -i enp61s0f1 -t 1 -r 3
 sudo hwstamp_ctl -i enp61s0f1 -t 0 -r 0
@@ -32,7 +33,7 @@ LiQ_P1c!l@
 https://jeromejaglale.com/doc/unix/ubuntu_sudo_without_password
 通过ssh -t手动输入password
 手动输入改为从文件读取
-5. 显示网卡信息
+1. 显示网卡信息
 sudo lspci | grep Network
 sudo lshw -class network
 sudo ethtool -s enp61s0f1 advertise 0x020

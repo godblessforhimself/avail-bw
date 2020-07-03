@@ -1,3 +1,18 @@
+#### arrangement
+1. client->server traffic Iperf3发包+DAG抓包
+   iperf3 -c 192.168.5.1 -ub 50M -l 1472 --pacing-timer 10 -t 10
+   或Iperf3自动选取包大小
+   iperf3 -c 192.168.5.1 -ub 50M --pacing-timer 10 -t 1
+   iperf3 -s -f m
+    dagconvert -T erf:pcap -i test.erf -o test.pcap
+   tshark --list-time-stamp-types
+sudo iptables -t nat -A POSTROUTING -s "192.168.2.0/24" -o enp96s0f0 -j MASQUERADE
+sudo iptables -t nat -A POSTROUTING -s "192.168.5.0/24" -o enp96s0f0 -j MASQUERADE
+sudo tcpdump -i enp96s0f1 -nN 'host 192.168.5.1 and not port 22'
+#### DAG 命令
+dagsnap -d0 -o a.erf -s 10 -v
+设备 文件 时间 调试
+dagbits -d0 -f test.erf decode delta mono
 #### 带宽测量
 1. 变长分组
 Pathchar，Pchar
