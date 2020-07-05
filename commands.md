@@ -18,7 +18,7 @@ sudo tc qdisc del dev enp61s0f0 handle ffff: ingress; sudo tc qdisc add dev enp6
 ip link set [interface] promisc on
 查看
 ip a show [interface] | grep -i promisc
-sudo sysctl net.ipv4.ip_forward=1
+sudo sysctl net.ipv4.ip_forward=1 + NAT(上网)
 sudo tcpdump -i enp61s0f1 -nN 'src host 192.168.0.19 and dst host 192.168.0.21'
 sudo tcpdump -i enp96s0f1 -nN 'host 192.168.2.7 and not port 22'
 启用硬件时间戳：部分有效
@@ -46,10 +46,10 @@ sudo ip link set dev vlan1 mtu 9702
 ping -c 3 -s 4972 -M do 192.168.1.21
 7. 修改send recv buffer
 sudo vi /etc/sysctl.conf
-net.core.rmem_default=2097152
-net.core.wmem_default=2097152
-net.core.rmem_max=2097152
-net.core.wmem_max=2097152
+net.core.rmem_default=16777216
+net.core.wmem_default=16777216
+net.core.rmem_max=16777216
+net.core.wmem_max=16777216
 2097152=2MB
 1000*9000B<9MB<16MB=16777216
 8. 使用pathload

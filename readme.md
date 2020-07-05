@@ -1,4 +1,33 @@
+####
+interface eth-0-45
+ switchport access vlan 100
+sudo ip link set dev enp27s0f1 mtu 9710
+iperf3 
+-l length
+-w windowsize
+应用每次把length的数据发送到socketbuffer中，socketbuffer大小为windowsize
+因此length<windowsize<socketbuffersize
+
+sysctl -p | grep mem
+/proc/sys/net/ipv4/tcp_mem
+iperf3 -fm -M 9200 -V -c 192.168.2.4 -l 1m -w 32m
+iperf3 -fm -M 9200 -V -c 192.168.2.3 -l 1m -w 32m
+sysctl -w net.ipv4.tcp_rmem="4096 16777216 16777216"
 #### arrangement
+client 192.168.2.3
+router 192.168.5.2 192.168.2.7 vlan1 vlan100
+server 192.168.5.1
+server=client=9710(udp=9710-28=9682) router=9216(udp=9216-28=9188)
+使用ping或者iperf3 UDP的最大MTU=9582，对应UDP数据大小=9554
+问题1：ping MTU = 9554 + 28 > 9216
+在192.168.2.0/24上，最大MTU也是9582B，是交换机的MTU吧
+问题2：iperf3 TCP 2000Mbps
+send  recv buffer 太小
+问题3：udp发包接收全为0
+iperf3获得的MTU不正确，UDP包大小=9658
+问题4：udp发包速率7000Mbps-9000Mbps，丢包率从小于1%-10%-20%
+交换机不行
+问题5：怎么配置路由器MTU和端口速率
 1. client->server traffic Iperf3发包+DAG抓包
    iperf3 -c 192.168.5.1 -ub 50M -l 1472 --pacing-timer 10 -t 10
    或Iperf3自动选取包大小
