@@ -1,47 +1,72 @@
 ####
-interface eth-0-45
- switchport access vlan 100
-sudo ip link set dev enp27s0f1 mtu 9710
-iperf3 
--l length
--w windowsize
-应用每次把length的数据发送到socketbuffer中，socketbuffer大小为windowsize
-因此length<windowsize<socketbuffersize
+先用dagsnap抓包erf
+    ssh zhufengtian@192.168.5.1 "cd ~/jintao_test/dag_version/build && nohup ./server &" 1>run.log 2>&1
+	sudo dagsnap -d0 -s 20 -o traffic.erf 1>run.log 2>&1 &
+    ssh amax@192.168.2.3 "cd ~/jintao_test/dag_version/build && nohup ./client &" 1>>run.log 2>&1
 
+再导出为pcap文件分析时间戳
+	sudo dagconvert -T erf:pcap -i traffic.erf -b "src host 192.168.2.3 and dst host 192.168.5.1 and udp" -f c -o in.pcap
+	sudo dagconvert -T erf:pcap -i traffic.erf -b "src host 192.168.2.3 and dst host 192.168.5.1 and udp" -f d -o out.pcap
+    sudo dagconvert -T erf:pcap -i traffic.erf -b "src host 192.168.2.3 and dst host 192.168.5.1 and udp" -f c,d -o all.pcap
+查看dt
+    sudo tcpdump -ttt -nN -r in.pcap | less
+#### 阶段目标
+* mtu、send、clock_gettime
+* 测量单向延迟 client以指定间隔发探测包
+* client能以1000Mbps（指定速率）发1472B的UDP包直到server丢包或超过指定时间
+* client能以指定间隔发探测包测量单向延迟
+
+sudo tcpdump -i enp27s0f1 -nN 'src host 192.168.2.3 and dst host 192.168.5.1 and udp and greater 100'
+#### 问题集
+* TCP 包头最小20字节，启用时间戳时额外12字节；因此1500-20-20-12=1448，为默认MSS
+* client enp27s0f1 网卡使用iperf3 TCP发包时使用MTU=1500时最大速率2000Mbps；使用MTU越大，最大速率越大。
+* 如何配置盛科路由交换机
+terminal length 0
+show vlan 100
+show interface eth-0-45
+configure terminal
+interface eth-0-45
+speed 1000
+* 如何测试能否修改端口速率
+sudo ethtool -s enp27s0f1 speed 1000 duplex full autoneg off
+sleep 1m
+sudo ethtool -s enp27s0f1 speed 10000 duplex full autoneg on
+
+使用cdf图表达分布
+rsync -avz -e 'ssh -p 3970' amax@aliyun.ylxdzsw.com:/home/amax/catch_traffic_dir/ catch_traffic_dir
+sudo dagconvert -d0 -T dag:pcap -o outfile.pcap -b ""
+####
+aliyun.ylxdzsw.com
+traffic->router->server
+设置链路速率
+* 如何修改端口MTU
+sudo ip link set dev enp27s0f1 mtu 9710
+sudo ip link set dev enp27s0f1 mtu 1500
+* iperf3参数解释
+-l length；-w windowsize；每次把length的数据发送到socketbuffer中，socketbuffer大小为windowsize
+* 如何修改最大socketbuffer
 sysctl -p | grep mem
 /proc/sys/net/ipv4/tcp_mem
 iperf3 -fm -M 9200 -V -c 192.168.2.4 -l 1m -w 32m
 iperf3 -fm -M 9200 -V -c 192.168.2.3 -l 1m -w 32m
 sysctl -w net.ipv4.tcp_rmem="4096 16777216 16777216"
-#### arrangement
-client 192.168.2.3
-router 192.168.5.2 192.168.2.7 vlan1 vlan100
-server 192.168.5.1
-server=client=9710(udp=9710-28=9682) router=9216(udp=9216-28=9188)
+cat /proc/net/ipv4/tcp_rmem
 使用ping或者iperf3 UDP的最大MTU=9582，对应UDP数据大小=9554
-问题1：ping MTU = 9554 + 28 > 9216
-在192.168.2.0/24上，最大MTU也是9582B，是交换机的MTU吧
-问题2：iperf3 TCP 2000Mbps
-send  recv buffer 太小
-问题3：udp发包接收全为0
-iperf3获得的MTU不正确，UDP包大小=9658
-问题4：udp发包速率7000Mbps-9000Mbps，丢包率从小于1%-10%-20%
-交换机不行
-问题5：怎么配置路由器MTU和端口速率
+* 路由交换机端口说明：有物理l2口port和虚拟口vlan。物理口使用no switchport变成l3口。物理l2口无MTU，只有最大帧限制9600B。虚拟口和l3口有MTU，最大9216B。如果包超过9216B，会被路由器分块；如果包超过9600B，会无法发送。
+* udp发包接收全为0：iperf3获得的MTU不正确，UDP包大小=9658
+* udp发包速率7000Mbps-9000Mbps，丢包率从小于1%-10%-20%
+
 1. client->server traffic Iperf3发包+DAG抓包
    iperf3 -c 192.168.5.1 -ub 50M -l 1472 --pacing-timer 10 -t 10
    或Iperf3自动选取包大小
    iperf3 -c 192.168.5.1 -ub 50M --pacing-timer 10 -t 1
    iperf3 -s -f m
     dagconvert -T erf:pcap -i test.erf -o test.pcap
-   tshark --list-time-stamp-types
-sudo iptables -t nat -A POSTROUTING -s "192.168.2.0/24" -o enp96s0f0 -j MASQUERADE
-sudo iptables -t nat -A POSTROUTING -s "192.168.5.0/24" -o enp96s0f0 -j MASQUERADE
-sudo tcpdump -i enp96s0f1 -nN 'host 192.168.5.1 and not port 22'
-#### DAG 命令
-dagsnap -d0 -o a.erf -s 10 -v
-设备 文件 时间 调试
-dagbits -d0 -f test.erf decode delta mono
+    tshark -r test.pcap | less
+    sudo tcpdump -i enp96s0f1 -nN 'host 192.168.5.1 and not port 22'
+    dagsnap -d0 -o a.erf -s 10 -v
+    设备 文件 时间 调试
+
 #### 带宽测量
 1. 变长分组
 Pathchar，Pchar

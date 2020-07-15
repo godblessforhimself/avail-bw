@@ -1,5 +1,5 @@
 #### 常用命令
-1. 将本项目复制到探测源
+1. **将本项目复制到探测源**
 scp -r . liqing@10.10.114.19:~
 2. 安装tmux
 sudo apt install tmux
@@ -8,8 +8,11 @@ https://github.com/tmux-plugins/tpm
 set -g mouse on
 set -g @plugin 'tmux-plugins/tmux-yank'
 set -g @plugin 'tmux-plugins/tmux-resurrect'
+set-window-option -g mode-keys vi
+set -g @yank_selection 'primary'
+set -g @shell_mode 'vi'
 source ~/.tmux.conf
-3. ubuntu apt
+1. ubuntu apt
 更换Tsinghua源 https://mirror.tuna.tsinghua.edu.cn/help/ubuntu/
 sudo apt install make cmake g++ iperf3 -y
 ssh -l liqing -o StrictHostKeyChecking=no 10.10.114.19 'sudo ls'
@@ -19,6 +22,7 @@ ip link set [interface] promisc on
 查看
 ip a show [interface] | grep -i promisc
 sudo sysctl net.ipv4.ip_forward=1 + NAT(上网)
+sudo iptables -t nat -A POSTROUTING -s "192.168.2.0/24" -o enp96s0f0 -j MASQUERADE
 sudo tcpdump -i enp61s0f1 -nN 'src host 192.168.0.19 and dst host 192.168.0.21'
 sudo tcpdump -i enp96s0f1 -nN 'host 192.168.2.7 and not port 22'
 启用硬件时间戳：部分有效
@@ -41,6 +45,7 @@ sudo ethtool -k enp61s0f1 #查看tso gso状态
 sudo ethtool -T enp61s0f1 #查看硬件时间戳支持
 6. 修改路径MTU
 sudo ip link set dev enp61s0f1 mtu 9702
+sudo ip link set dev enp27s0f0 mtu 9100
 sudo ip link set dev vlan0 mtu 9702
 sudo ip link set dev vlan1 mtu 9702
 ping -c 3 -s 4972 -M do 192.168.1.21
@@ -62,3 +67,5 @@ rm pathload.txt
 sudo tc qdisc del dev vlan1 root; sudo tc qdisc add dev vlan1 root tbf rate 100mbit burst 10kb limit 10000kb
 设置src出口速率
 sudo tc qdisc del dev enp61s0f1 root; sudo tc qdisc add dev enp61s0f1 root tbf rate 100mbit burst 10kb limit 10000kb
+9. ssh 代理 jupyter
+ssh -N -L 8080:localhost:8080 <remote_user>@<remote_host>
