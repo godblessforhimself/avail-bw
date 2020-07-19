@@ -1,3 +1,27 @@
+#### 7.17
+设置路由到服务器的带宽1kMbps
+iperf3 traffic -> server 900Mbps
+prober -> server 1000Mbps
+sudo ethtool enp27s0f0
+sudo ethtool -s enp27s0f0 speed 1000 duplex full autoneg off
+
+show vlan 100
+configure terminal
+interface eth-0-45
+speed 1000
+
+测试速率
+iperf3 -sfm
+iperf3 -c192.168.5.1 -fm -V
+iperf3 -c192.168.5.1 -ub1000M -fmV
+
+sudo tcpdump -i enp27s0f1 -nN 'src host 192.168.2.3 and dst host 192.168.5.1 and udp'
+
+client以1000Mbps向server发送10000个大小为1472B的UDP包（12us间隔）
+traffic设置0-1000Mbps流量
+DAG捕捉离开client和到达server的包
+
+
 ####
 先用dagsnap抓包erf
     ssh zhufengtian@192.168.5.1 "cd ~/jintao_test/dag_version/build && nohup ./server &" 1>run.log 2>&1
