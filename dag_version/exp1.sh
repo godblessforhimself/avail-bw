@@ -1,3 +1,4 @@
+#iperf3发包的包间隔分布数据采集
 #抓包
 ssh zhufengtian@192.168.5.1 "pkill jintao_server;cd ~/jintao_test/dag_version/build; nohup ./jintao_server 1>run.log 2>&1 &"
 sudo dagsnap -d0 -s 3 -o traffic.erf 1>run.log 2>&1 &
