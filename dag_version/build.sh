@@ -1,3 +1,5 @@
+#dir=~/jintao_test/dag_version/build/jintao_server
+#dir=~/jintao_test/dag_version/build/jintao_client
 printf "start build ..."
 CurrentDirname=$(pwd)
 Logfilename="temp/build.log"
