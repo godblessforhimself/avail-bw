@@ -29,13 +29,13 @@ test_fun(){
     #探测程序开始发包
     Traffic=$1
     PacketNum=$2
-    #SetUpIperf3 $Traffic
+    SetUpIperf3 $Traffic
     SetUpDag
     StartProbing $PacketNum
     sleep 2s
     Clear
 }
-test_fun 500 3000
+test_fun 800 2000
 cd ~/jintao_test/dag_version/data/exp2
 sudo dagconvert -T erf:pcap -i traffic.erf -b "src host 192.168.2.3 and dst host 192.168.5.1 and udp" -f c,d -o all.pcap
 sudo dagconvert -T erf:pcap -i traffic.erf -b "src host 192.168.2.3 and dst host 192.168.5.1 and udp" -f c -o in.pcap
