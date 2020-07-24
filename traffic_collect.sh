@@ -7,10 +7,10 @@ catch_traffic(){
 	Erf_filename="${Dirname}/traffic_${Traffic_speed}.erf"
 	In_filename="${Dirname}/in_traffic_${Traffic_speed}.pcap"
 	Out_filename="${Dirname}/out_traffic_${Traffic_speed}.pcap"
-	ssh zhufengtian@192.168.5.1 "pkill iperf3; nohup iperf3 -sfm 1>~/iperf3.log 2>&1 &"
+	ssh zhufengtian@192.168.5.1 "pkill iperf3; nohup iperf3 -sfm 1>/dev/null 2>&1 &"
 	sudo dagsnap -d0 -s 20 -o ${Erf_filename} &
 	sleep 1s
-	ssh amax@192.168.2.3 "pkill iperf3; nohup iperf3 -f m -c 192.168.5.1 -l 1472 -ub ${Traffic_speed}M -k 10k --pacing-timer 1000 1>~/iperf3.log 2>&1 &"
+	ssh amax@192.168.2.3 "pkill iperf3; nohup iperf3 -f m -c 192.168.5.1 -l 1472 -ub ${Traffic_speed}M -k 10k --pacing-timer 1 1>/dev/null 2>&1 &"
 	printf "config iperf3 and dagsnap done.\n"
 	sleep 20s
 	ssh zhufengtian@192.168.5.1 "pkill iperf3"

@@ -1,5 +1,10 @@
+/*
+	version: exp2
+	param: packet number
+	example: ./jintao_server 3000
+*/
 #include "util.cpp"
-int listen_fd = -1, conn_fd = -1, udp_fd = -1;
+int listen_fd = -1, conn_fd = -1, udp_fd = -1, packet_number = -1;
 socklen_t sock_len = 0;
 sockaddr_in server_address, client_address;
 char udpbuffer[10000];
@@ -7,15 +12,25 @@ void init();
 void get_basic_info_server();
 long test_recv(int repeat, int packet_size);
 void recv_udp_packets(int,int);
+void recv_probe_packets(int packet_number);
 int main(int argc, char *argv[]) {
-	tick();
 	init();
+	tick();
+	if (argc != 2) {
+		printf("lack packet number\n");
+		return -1;
+	}
+	packet_number = atoi(argv[1]);
+	printf("recving %d packet\n", packet_number);
 	if (running_mode == 1) {
 		get_basic_info_server();
 	} else if (running_mode == 2) {
 		recv_udp_packets(100, 10);
 	} else if (running_mode == 3){
-		recv_udp_packets(10000, 1472);
+		recv_udp_packets(packet_number, 1472);
+		tock();
+		tick();
+		recv_probe_packets(100);
 	}
 	tock();
 }
@@ -74,5 +89,15 @@ void recv_udp_packets(int packet_number, int packet_size) {
 		if (recvsize > 0) total += recvsize;
 		else perror("recv:");
 	}
-	printf("recv total %zd\n", total);
+	printf("recv total %zd, average %zd\n", total, total / ssize_t(packet_number));
+}
+void recv_probe_packets(int packet_number) {
+	/* recv n probe packets */
+	ssize_t recvsize, total = 0;
+	for (int i = 0; i < packet_number; i++) {
+		recvsize = recv(udp_fd, udpbuffer, 4, 0);
+		if (recvsize > 0) total += recvsize;
+		else perror("recv:");
+	}
+	printf("recv total %zd, average %zd\n", total, total / ssize_t(packet_number));
 }

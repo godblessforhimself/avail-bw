@@ -1,6 +1,7 @@
 #ifndef UTIL_C
 #define UTIL_C
 #include <time.h>
+#include <assert.h>
 #include <netinet/tcp.h> // TCP_MAXSEG
 #include <sys/socket.h>
 #include <netinet/in.h>

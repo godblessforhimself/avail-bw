@@ -1,5 +1,11 @@
+/*
+	version: exp2
+	param: speed, packet_number
+	example: ./jintao_client 1000 3000
+*/
 #include "util.cpp"
-int tcp_fd = -1, udp_fd = -1;
+int tcp_fd = -1, udp_fd = -1, packet_number = -1;
+double send_speed = -1;
 char server_ip_str[] = "192.168.5.1";
 char udpbuffer[10000];
 sockaddr_in server_address, client_addr;
@@ -9,15 +15,25 @@ void get_basic_info_client();
 void send_udp_packets(int packet_number, int packet_size, int microsecond);
 void send_at_speed(double speed, int packet_size, int packet_number);
 long test_send(int repeat, int packet_size);
+void probe_at_gap(int us, int packet_number);
 int main(int argc, char *argv[]) {
 	tick();
 	init();
+	if (argc != 3) {
+		printf("lack packet number\n");
+		return -1;
+	}
+	send_speed = atof(argv[1]);
+	packet_number = atoi(argv[2]);
+	assert(send_speed > 0 && packet_number > 0);
+	printf("sending %d packet\n", packet_number);
 	if (running_mode == 1) {
 		get_basic_info_client();
 	} else if (running_mode == 2) {
 		send_udp_packets(100, 10, 100);
 	} else if (running_mode == 3){
-		send_at_speed(1000, 1472, 10000);
+		send_at_speed(send_speed, 1472, packet_number);
+		probe_at_gap(1000, 100);
 	}
 	tock();
 }
@@ -56,11 +72,12 @@ void send_udp_packets(int packet_number, int packet_size, int microsecond){
 			clock_nanosleep(clock_to_use, 0, &sleep_time, NULL);
 		}
 	}
-	printf("send total %zd\n", send_total);
+	printf("send total %zd, average size %zd\n", send_total, send_total / ssize_t(packet_number));
 }
 void send_at_speed(double speed, int packet_size, int packet_number){
 	/* send udp with controlled speed, stop when server loses packet */
 	timespec start_time, current_time;
+	memset(udpbuffer, 0, sizeof(udpbuffer));
 	double current_speed, elapse_time_us, packet_sent = 0;
 	clock_gettime(clock_to_use, &start_time);
 	while (true) {
@@ -69,6 +86,7 @@ void send_at_speed(double speed, int packet_size, int packet_number){
 		elapse_time_us *= 1e6;
 		current_speed = double(packet_size * 8) * packet_sent / elapse_time_us;
 		if (current_speed < speed) {
+			*(int*)udpbuffer = int(packet_sent) + 1;
 			send(udp_fd, udpbuffer, packet_size, 0);
 			packet_sent += 1;
 			if (packet_sent == packet_number) {
@@ -76,6 +94,26 @@ void send_at_speed(double speed, int packet_size, int packet_number){
 			}
 		}
 	}
+}
+void probe_at_gap(int us, int packet_number){
+	/* send probe udp packet of size packet_size with gap us for packet_number */
+	/* first probe is sent immediatelly */
+	timespec start_time, current_time;
+	clock_gettime(clock_to_use, &start_time);
+	double elapse_time_us = 0;
+	for (int i = 0; i < packet_number; i++) {
+		loop1:
+		clock_gettime(clock_to_use, &current_time);
+		elapse_time_us = (timespec2double(current_time) - timespec2double(start_time)) * 1e6;
+		if (elapse_time_us > i * double(us)) {
+			*(int*)udpbuffer = i + 1;
+			send(udp_fd, udpbuffer, 4, 0);
+			continue;
+		} else {
+			goto loop1;
+		}
+	}
+	printf("send %d probings\n", packet_number);
 }
 long test_send(int repeat, int packet_size){
 	/* test send time for repeat times */

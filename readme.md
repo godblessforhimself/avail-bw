@@ -1,3 +1,29 @@
+#### 7.23
+可用带宽=探测包/探测总时间(探测时间+回复时间)
+* 无背景流量
+估计为957Mbps。
+2000Mbps速率探测，3000个探测包
+探测时间为17647us=17ms，回复时间约19285us=19ms
+
+* 背景流量=500Mbps
+估计值456-469，没使用拟合算法
+17646:59614
+
+* 800Mbps
+3000个包发生丢包，减小到2000包
+估计值226->205->207->...->212
+问题：delay2没有回复到水平线
+以4us作为delay的正常值，估计值为166->150->152->...156
+
+* 添加测量delay正常值的步骤
+* 添加自动拟合下降直线的步骤
+* 添加自动选取发包数的步骤
+#### 7.22
+
+500Mps背景流量 10000个探测包（约1000Mbps速率）实际接收了8949个包，发生丢包
+10000*1500B=15MB
+使用iperf3以最大速率发6MB丢包，推测路由缓冲区大小=6MB。
+6MB/1500B=4K。实际探测包可以更多，最大数量=缓冲区大小/背景流量速率/瓶颈链路发一个包时间
 #### 7.17
 设置路由到服务器的带宽1kMbps
 iperf3 traffic -> server 900Mbps
@@ -58,6 +84,7 @@ sudo ethtool -s enp27s0f1 speed 10000 duplex full autoneg on
 
 使用cdf图表达分布
 rsync -avz -e 'ssh -p 3970' amax@aliyun.ylxdzsw.com:/home/amax/catch_traffic_dir/ catch_traffic_dir
+rsync -avz -e 'ssh -p 3970' amax@aliyun.ylxdzsw.com:/home/amax/jintao_test/dag_version/draw_cdf.ipynb draw_cdf.ipynb
 sudo dagconvert -d0 -T dag:pcap -o outfile.pcap -b ""
 ####
 aliyun.ylxdzsw.com
