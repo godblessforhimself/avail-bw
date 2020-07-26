@@ -31,6 +31,8 @@ int main(int argc, char *argv[]) {
 		tock();
 		tick();
 		recv_probe_packets(100);
+	} else if (running_mode == 4) {
+		recv_probe_packets(100);
 	}
 	tock();
 }

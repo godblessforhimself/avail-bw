@@ -12,7 +12,7 @@
 #include <algorithm> //sort
 using namespace std;
 clockid_t clock_to_use = CLOCK_TAI;
-int server_listen_port = 11106, running_mode = 3, send_repeat_count = 1e3;
+int server_listen_port = 11106, running_mode = 4, send_repeat_count = 1e3;
 timespec program_begin, program_end;
 int set_reuse_addr(int fd) {
     int optval = 1;

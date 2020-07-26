@@ -11,3 +11,4 @@ experiment_record.txt
 /catch_traffic_dir/
 /dag_version/build/*
 /data/
+*.ipynb

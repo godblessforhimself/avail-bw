@@ -34,6 +34,8 @@ int main(int argc, char *argv[]) {
 	} else if (running_mode == 3){
 		send_at_speed(send_speed, 1472, packet_number);
 		probe_at_gap(1000, 100);
+	} else if (running_mode == 4) {
+		probe_at_gap(1000, 100);
 	}
 	tock();
 }
