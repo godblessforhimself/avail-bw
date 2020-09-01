@@ -66,6 +66,7 @@ sudo tc qdisc del dev vlan1 root; sudo tc qdisc add dev vlan1 root tbf rate 100m
 * ssh 代理 jupyter
 ssh -N -L 8080:localhost:8080 <remote_user>@<remote_host>
 * dagconvert
+  
 sudo dagconvert -T erf:pcap -i traffic.erf -b "src host 192.168.2.4 and dst host 192.168.5.1 and udp" -f c -o in.pcap
 * 显示网卡速率
 sudo ethtool enp27s0f0
@@ -81,7 +82,22 @@ speed 1000
 receive protocols/line rates(page 20)
   sudo dagconfig -d0 --portd 1000
   sudo dagconfig -d0 --portd 10G_lan
-  关闭自动协商
+关闭自动协商
 sudo dagconfig -d0 --portd nonic
 打开自动协商
 sudo dagconfig -d0 --portd nic
+
+#### dag抓包
+```
+sudo dagsnap -d0 -s 5 -o tf.erf
+```
+
+#### dag导出pcap
+```
+sudo dagconvert -T erf:pcap -i tf.erf -f d -o tf.pcap
+```
+
+#### tcpdump查看
+```
+sudo tcpdump -nN -r tf.pcap | less
+```

@@ -9,6 +9,9 @@ def cdf(x, plot=True, *args, **kwargs):
     return plt.plot(x, y, *args, **kwargs) if plot else (x, y)
 def get_dtime(timestamp, scale):
     return (timestamp[1:]-timestamp[:-1])*scale
+def intercept(x1,y1,x2,y2,y):
+    # return x value where line cross (x1,y1) (x2,y2) intercept y
+    return x1+(x2-x1)*(y-y1)/(y2-y1)
 begin=time.time()
 in_pkts=rdpcap(in_traffic_filename)
 out_pkts=rdpcap(out_traffic_filename)
