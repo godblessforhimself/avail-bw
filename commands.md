@@ -16,9 +16,9 @@ source ~/.tmux.conf
 更换Tsinghua源 https://mirror.tuna.tsinghua.edu.cn/help/ubuntu/
 sudo tc qdisc del dev enp61s0f0 handle ffff: ingress; sudo tc qdisc add dev enp61s0f0 handle ffff: ingress; sudo tc filter add dev enp61s0f0 parent ffff: handle 800::800 u32 match u32 0 0 action police rate 100mbit burst 5000kb mtu 1500 conform-exceed drop; tc filter show dev enp61s0f0 parent ffff: handle 800::800;
 * 设置网卡为混杂模式
-ip link set [interface] promisc on
+ip link set eth1 promisc on/off
 * 查看网卡混杂模式
-ip a show [interface] | grep -i promisc
+ip a show eth1 | grep -i promisc
 * 开启软路由
 sudo sysctl net.ipv4.ip_forward=1 + NAT(上网)
 sudo iptables -t nat -A POSTROUTING -s "192.168.2.0/24" -o enp96s0f0 -j MASQUERADE
@@ -100,4 +100,35 @@ sudo dagconvert -T erf:pcap -i tf.erf -f d -o tf.pcap
 #### tcpdump查看
 ```
 sudo tcpdump -nN -r tf.pcap | less
+```
+#### tcpdump添加-e查看mac地址
+```
+sudo tcpdump -i eth1 -e
+```
+#### tcpdump 捕捉以太网地址
+```
+sudo tcpdump -nN -e -c 10 -i enp96s0f1 "ether host 02:00:00:00:00:00"
+```
+#### 禁用IPv6
+``` 
+  sudo vi /etc/sysctl.conf
+  net.ipv6.conf.all.disable_ipv6=1
+  net.ipv6.conf.default.disable_ipv6=1
+  net.ipv6.conf.lo.disable_ipv6=1
+```
+
+#### 开启、关闭网卡
+```
+ip link set eth1 up/down
+```
+
+#### 检查当前是否ip转发
+```
+sudo cat /proc/sys/net/ipv4/ip_forward
+```
+
+#### 删除网卡IP
+```
+ip addr del 10.22.30.44/16 dev eth0
+ip addr flush dev eth0
 ```
