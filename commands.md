@@ -5,6 +5,7 @@ scp -r . liqing@10.10.114.19:~
 sudo apt install tmux
 git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm
 https://github.com/tmux-plugins/tpm
+vi ~/.tmux.conf
 set -g mouse on
 set -g @plugin 'tmux-plugins/tmux-yank'
 set -g @plugin 'tmux-plugins/tmux-resurrect'
