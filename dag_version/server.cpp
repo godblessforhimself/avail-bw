@@ -1,10 +1,12 @@
 /*
 	version: exp2
 	param: packet number
-	example: ./jintao_server 3000
+	example: ./jintao_server 1 3000
+
+	./jintao_server 6 2000
 */
 #include "util.cpp"
-int listen_fd = -1, conn_fd = -1, udp_fd = -1, packet_number = -1;
+int listen_fd = -1, conn_fd = -1, udp_fd = -1, packet_number = -1, packet_size = 1472;
 socklen_t sock_len = 0;
 sockaddr_in server_address, client_address;
 char udpbuffer[10000];
@@ -13,14 +15,12 @@ void get_basic_info_server();
 long test_recv(int repeat, int packet_size);
 void recv_udp_packets(int,int);
 void recv_probe_packets(int packet_number);
+void recv_mmsg(int packet_size, int packet_number);
 int main(int argc, char *argv[]) {
 	init();
 	tick();
-	if (argc != 2) {
-		printf("lack packet number\n");
-		return -1;
-	}
-	packet_number = atoi(argv[1]);
+	running_mode = atoi(argv[1]);
+	packet_number = atoi(argv[2]);
 	printf("recving %d packet\n", packet_number);
 	if (running_mode == 1) {
 		get_basic_info_server();
@@ -33,8 +33,15 @@ int main(int argc, char *argv[]) {
 		recv_probe_packets(100);
 	} else if (running_mode == 4) {
 		recv_probe_packets(100);
+	} else if (running_mode == 5) {
+		recv_mmsg(packet_size, packet_number);
+	} else if (running_mode == 6) {
+		recv_udp_packets(packet_number, packet_size);
 	}
 	tock();
+}
+void recv_mmsg(int packet_size, int packet_number) {
+
 }
 void init(){
 	int ret;

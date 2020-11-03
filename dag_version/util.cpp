@@ -9,10 +9,12 @@
 #include <unistd.h> //getopt
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <algorithm> //sort
+#include <iostream>
 using namespace std;
 clockid_t clock_to_use = CLOCK_TAI;
-int server_listen_port = 11106, running_mode = 1, send_repeat_count = 1e3;
+int server_listen_port = 11106, running_mode = 5, send_repeat_count = 1e3;
 timespec program_begin, program_end;
 int set_reuse_addr(int fd) {
     int optval = 1;

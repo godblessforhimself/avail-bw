@@ -1,10 +1,13 @@
 /*
 	version: exp2
 	param: speed, packet_number
-	example: ./jintao_client 1000 3000
+	example: ./jintao_client 1 1000 3000
+
+	./jintao_client 1.0 1000
+	./jintao_client 6 1000 36.5 300.7
 */
 #include "util.cpp"
-int tcp_fd = -1, udp_fd = -1, packet_number = -1;
+int tcp_fd = -1, udp_fd = -1, packet_number = -1, packet_size = 1472;
 double send_speed = -1;
 char server_ip_str[] = "192.168.5.1";
 char udpbuffer[10000];
@@ -16,17 +19,17 @@ void send_udp_packets(int packet_number, int packet_size, int microsecond);
 void send_at_speed(double speed, int packet_size, int packet_number);
 long test_send(int repeat, int packet_size);
 void probe_at_gap(int us, int packet_number);
+void send_using_mmsg(int packet_size, int packet_number);
+void send_packet_pairs(int packet_size, int pair_number, double G, double GGI);
+void clean();
 int main(int argc, char *argv[]) {
 	tick();
 	init();
-	if (argc != 3) {
-		printf("lack packet number\n");
-		return -1;
-	}
-	send_speed = atof(argv[1]);
-	packet_number = atoi(argv[2]);
-	assert(send_speed > 0 && packet_number > 0);
-	printf("sending %d packet\n", packet_number);
+	running_mode = atoi(argv[1]);
+	send_speed = atof(argv[2]);
+	packet_number = atoi(argv[3]);
+	if (running_mode == 3)
+		assert(send_speed > 0 && packet_number > 0);
 	if (running_mode == 1) {
 		get_basic_info_client();
 	} else if (running_mode == 2) {
@@ -36,8 +39,63 @@ int main(int argc, char *argv[]) {
 		probe_at_gap(1000, 100);
 	} else if (running_mode == 4) {
 		probe_at_gap(1000, 100);
+	} else if (running_mode == 5) {
+		send_using_mmsg(packet_size, packet_number);
+	} else if (running_mode == 6) {
+		int pair_number = atoi(argv[2]), G_us = atof(argv[3]), GGI_us = atof(argv[4]);
+		send_packet_pairs(packet_size, pair_number, G_us, GGI_us);
 	}
+	clean();
 	tock();
+}
+void send_packet_pairs(int packet_size, int pair_number, double G, double GGI) {
+	timespec start, now;
+	clock_gettime(clock_to_use, &start);
+	double start_d = timespec2double(start), temp_d, now_d;
+	ssize_t sum = 0, temp;
+	for (int i = 0; i < pair_number; i ++) {
+		temp = send(udp_fd, udpbuffer, packet_size, 0);
+		if (temp != -1)
+			sum += temp;
+		else {
+			perror("send error:");
+		}
+		while (true) {
+			clock_gettime(clock_to_use, &now);
+			now_d = timespec2double(now);
+			temp_d = start_d + G / 1e6;
+			if (now_d >= temp_d)
+				break;
+		}
+		temp = send(udp_fd, udpbuffer, packet_size, 0);
+		if (temp != -1)
+			sum += temp;
+		else {
+			perror("send error:");
+		}
+		while (true) {
+			clock_gettime(clock_to_use, &now);
+			now_d = timespec2double(now);
+			temp_d = (G + GGI + rand() % int(2*G)) / 1e6 + start_d;
+			if (now_d >= temp_d) {
+				start_d = now_d;
+				break;
+			}
+		}
+	}
+	printf("Finish\n");
+}
+void send_using_mmsg(int packet_size, int packet_number) {
+	mmsghdr msg[packet_number];
+	iovec msg_vec;
+	msg_vec.iov_base = udpbuffer;
+	msg_vec.iov_len = packet_size;
+	for (int i = 0; i < packet_number; i++) {
+		msg[i].msg_hdr.msg_iov = &msg_vec;
+		msg[i].msg_hdr.msg_iovlen = 1;
+	}
+	int r = sendmmsg(udp_fd, msg, packet_number, 0);
+	cout << "sendmmsg " << r << endl;
 }
 void init(){
 	set_sockaddr(&server_address, server_ip_str, server_listen_port);
@@ -49,6 +107,10 @@ void init(){
 	udp_fd = socket(AF_INET, SOCK_DGRAM, 0);
 	bind_address(udp_fd, &client_addr);
 	if (connect(udp_fd, (sockaddr*)&server_address, sock_len)) perror("udp connect:");
+}
+void clean(){
+	close(tcp_fd);
+	close(udp_fd);
 }
 void get_basic_info_client(){
 	/* mtu, clock_gettime, send */

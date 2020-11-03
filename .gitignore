@@ -13,3 +13,5 @@ experiment_record.txt
 /data/
 *.ipynb
 /dag_version/data/
+nohup.out
+*.png

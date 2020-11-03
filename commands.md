@@ -88,6 +88,14 @@ sudo dagconfig -d0 --portd nonic
 打开自动协商
 sudo dagconfig -d0 --portd nic
 
+#### 检测DAG是否正常
+```
+sudo dagdetect -v
+```
+#### 加载DAG驱动
+```
+sudo dagload
+```
 #### dag抓包
 ```
 sudo dagsnap -d0 -s 5 -o tf.erf
