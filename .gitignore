@@ -15,3 +15,5 @@ experiment_record.txt
 /dag_version/data/
 nohup.out
 *.png
+data
+version-x/send-recv-module/build

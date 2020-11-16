@@ -1,3 +1,9 @@
+#### linux network optimization
+1. interrupt coalescing
+sudo ethtool -c enp27s0f0 
+sudo ethtool -C enp27s0f0 rx-usecs 0
+2. busy-poll in user space
+
 #### 8.1
 两跳 有背景流量时，单向延迟测量
 两跳 有背景流量时，单向延迟变化
