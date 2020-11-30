@@ -29,6 +29,7 @@ struct control_parameter {
 struct timestamp_packet {
 	int packet_id;
 	double timestamp[2];
+	/* ----------------------------- */
 	timestamp_packet();
 	timestamp_packet(int x, double y);
 	void update(int x, double y);

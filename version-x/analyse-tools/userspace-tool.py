@@ -1,6 +1,18 @@
 import code,sys
 import numpy as np
 import matplotlib.pyplot as plt
+import argparse
+
+parser = argparse.ArgumentParser(description='parser')
+parser.add_argument('--file', type=str)
+parser.add_argument('--interact', action='store_true')
+parser.add_argument('--show-image', action='store_true')
+parser.add_argument('--save-image', action='store_true')
+args = parser.parse_args()
+# cluster load packet output gap to find the average gap
+def remove_suffix(s):
+	idx=s.find('.')
+	return s[:idx]
 def smooth(x,thres=10):
 	# x[0]>thres
 	# x[k]>thres
@@ -11,8 +23,9 @@ def smooth(x,thres=10):
 	return ret
 	
 path='data/output.txt'
-#if len(sys.argv)==2:
-#	path=sys.argv[1]
+if args.file:
+	path=args.file
+	#print(path)
 data=np.loadtxt(path)
 data=data*1e6
 load_number=100
@@ -31,7 +44,17 @@ def diff(x):
 gin=diff(data[:,0])
 gout=diff(data[:,1])
 owd=data[:,1]-data[:,0]
-
+owdd=owd-owd[0]
+oowd=owdd[100:]
+if args.show_image:
+	plt.plot(owdd)
+	plt.show()
+if args.save_image:
+	plt.plot(oowd)
+	plt.xticks(np.arange(10))
+	plt.ylim((owdd.min()-1,owdd.max()+1))
+	output_filename=remove_suffix(args.file)+'.png'
+	plt.savefig(output_filename,bbox_inches='tight')
 if False:
 	plt.subplot(2,2,1)
 	plt.plot(gin)
@@ -42,7 +65,8 @@ if False:
 	plt.show()
 
 array=[gin.mean(),gin.std(),gout.mean(),gout.std()]
-print('gin  {:.2f},{:.2f}\ngout {:.2f},{:.2f}\n'.format(*array))
+if False:
+	print('gin  {:.2f},{:.2f}\ngout {:.2f},{:.2f}\n'.format(*array))
 
-if len(sys.argv)>=2 and sys.argv[1]=='-i':
+if args.interact:
 	code.interact(local=dict(globals(),**locals()))

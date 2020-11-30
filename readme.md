@@ -1,3 +1,16 @@
+#### 
+cf=0 100Mbps 200Mbps
+A=1000 900 800
+P=1500B*100
+t=P/A=
+1200us 1333us 1500us
+
+1500B/A
+12us 13.3us 15us
+
+
+100Mbps
+1500B/100Mbps=120us
 #### linux network optimization
 1. interrupt coalescing
 sudo ethtool -c enp27s0f0 

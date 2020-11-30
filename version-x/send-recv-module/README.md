@@ -13,3 +13,6 @@ for i in range(11):
 taskset -c 3 ./send-main --speed 1500 --size 1472 --dest 192.168.5.1 --port 11106 --number 100 --inspect 1177.6 1188.5 1199.8 1211.6 1223.8 1236.5 1249.7 1263.5 1277.8 1292.8 1308.4
 
 taskset -c 3 ./send-main --speed 1500 --size 1472 --dest 192.168.5.1 --port 11106 --number 100 --inspect 800 900 1000 1100 1200
+
+* timestamp is stored in struct timestamp_packet
+* when saved, precision is 6, send time-offset space recv time - offset
