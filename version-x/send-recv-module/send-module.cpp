@@ -1,11 +1,11 @@
 /*
-	./send-main --speed 100 --size 1472 --dest 127.0.0.1 --port 11106 --number 100
+	taskset -c 3 ./send-main --speed 1500 --load-size 1472 --inspect-size 24 --dest 192.168.5.1 --port 11106 --number 100 --inspect 800 1000 1200 1400 1600 1800 2000 2200 2400 2600
 */
 #include "send-module.h"
 #include "util.h"
 #include <algorithm>
 
-int tcp_fd = -1, udp_fd = -1, load_number = 100, packet_size = 1472, dest_port = 11106, inspection_number = 0;
+int tcp_fd = -1, udp_fd = -1, load_number = 100, packet_size = 1472, dest_port = 11106, inspection_number = 0, inspect_size = 1472;
 double send_speed = 0, inspection_time[100];
 char dest_ip_string[20] = "192.168.5.1", udpbuffer[10000];
 sockaddr_in src_address, dest_address;
@@ -18,7 +18,8 @@ int parse_args(int argc, char *argv[]) {
     */
 	static struct option long_options[] = {
 		{"speed",   required_argument, 0,  0 },
-		{"size",    required_argument, 0,  0 },
+		{"load-size",    required_argument, 0,  0 },
+		{"inspect-size",    required_argument, 0,  0 },
 		{"number",  required_argument, 0,  0 },
 		{"dest",    required_argument, 0,  0 },
 		{"port",    required_argument, 0,  0 },
@@ -36,8 +37,10 @@ int parse_args(int argc, char *argv[]) {
 					} else {
 						send_speed = atof(optarg);
 					}
-				} else if (ARG_EQUAL("size")) {
+				} else if (ARG_EQUAL("load-size")) {
 					packet_size = atoi(optarg);
+				} else if (ARG_EQUAL("inspect-size")) {
+					inspect_size = atoi(optarg);
 				} else if (ARG_EQUAL("number")) {
 					load_number = atoi(optarg);
 				} else if (ARG_EQUAL("dest")) {
@@ -59,6 +62,15 @@ int parse_args(int argc, char *argv[]) {
     }
 	if (inspection_number > 0) {
 		sort(inspection_time, inspection_time + inspection_number);
+	}
+	int min_packet_size=(int)sizeof(timestamp_packet);
+	if (packet_size < min_packet_size) {
+		printf("load packet size %d < min %d\n", packet_size, min_packet_size);
+		packet_size = min_packet_size;
+	}
+	if (inspect_size < min_packet_size) {
+		printf("inspect packet size %d < min %d\n", inspect_size, min_packet_size);
+		inspect_size = min_packet_size;
 	}
 	if (true) {
 		printf("speed %.2f, size %d, number %d, recv ip %s, recv port %d\n", send_speed, packet_size, load_number, dest_ip_string, dest_port);
@@ -96,7 +108,7 @@ void exchange_parameter() {
 		ready for receiving
 	*/
 	ssize_t ret;
-	control_parameter control_instance(packet_size, load_number, inspection_number);
+	control_parameter control_instance(packet_size, load_number, inspection_number, inspect_size);
 	memset(udpbuffer, 0, sizeof(udpbuffer));
 	memcpy(udpbuffer, &control_instance, sizeof(control_parameter));
 	ret = send(tcp_fd, udpbuffer, CONTROL_MESSAGE_LENGTH_1, 0);
@@ -154,7 +166,7 @@ void send_inspect() {
 		printf("current time %f > inspect[0] %f\n", elapse_time_us, inspection_time[0]);
 	}
 	memset(udpbuffer, 0, sizeof(udpbuffer));
-	for (int i = 0; i < inspection_number;) {
+	for (int i = 0; i < inspection_number; ) {
 		clock_gettime(clock_to_use, &current_time);
 		current_time_double = timespec2double(current_time);
 		current_time_us = current_time_double * 1e6;
@@ -162,7 +174,7 @@ void send_inspect() {
 		if (inspection_time[i] <= elapse_time_us) {
 			tpacket_temp.update(i, current_time_double);
 			memcpy(udpbuffer, &tpacket_temp, sizeof(timestamp_packet));
-			ret = send(udp_fd, udpbuffer, packet_size, 0);
+			ret = send(udp_fd, udpbuffer, inspect_size, 0);
 			if (ret != (ssize_t)packet_size) {
 				perror("inspect packet:");
 			}	

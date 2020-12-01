@@ -1,15 +1,17 @@
 #include "util.h"
 clockid_t clock_to_use = CLOCK_REALTIME;
 timespec program_begin, program_end;
-control_parameter::control_parameter(int x, int y, int z) {
+control_parameter::control_parameter(int x, int y, int z, int w) {
 	packet_size = htonl(x);
 	load_number = htonl(y);
 	inspect_number = htonl(z);
+	inspect_size = htonl(w);
 }
 void control_parameter::network2host() {
 	packet_size = ntohl(packet_size);
 	load_number = ntohl(load_number);
 	inspect_number = ntohl(inspect_number);
+	inspect_size = ntohl(inspect_size);
 }
 timestamp_packet::timestamp_packet() {
 	packet_id = 0;

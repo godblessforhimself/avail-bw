@@ -22,8 +22,8 @@ using namespace std;
 #define CONTROL_MESSAGE_LENGTH_2 (10)
 #define READY_FOR_RECEIVE (77017)
 struct control_parameter {
-	int packet_size, load_number, inspect_number;
-	control_parameter(int x, int y, int z);
+	int packet_size, load_number, inspect_number, inspect_size;
+	control_parameter(int x, int y, int z, int w);
 	void network2host();
 };
 struct timestamp_packet {

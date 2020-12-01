@@ -1,4 +1,4 @@
-deploy-tools:
+# deploy-tools:
 
 deploy-run-fetch.sh
 run quick-deploy.sh, quick-run.sh , fetch-output.sh
@@ -19,7 +19,7 @@ receiver.sh
 run receive-main at receiver
 
 
-control-module
+# control-module
 
 dag-run.sh
 setup dag before running receive-main and sender-main
@@ -29,13 +29,19 @@ run receive-main and send-main
 
 fetch-tools
 
-fetch-output.sh
-use rsync to move output.txt at receiver to dag, than to local.
+fetch-timestamp.sh [filename]
+use rsync to move output.txt at receiver to dag, then to local data.
 
 fetch-data.sh
-use rsync to move output.txt from receiver to dag's data, than move data from dag to local's data.
+transfer timestamp file from receiver, dag capture file from DAG to local data.
 
-Time Sync
+quickrun-fetch.sh [rate] [data filename]
+
+# analyse-tools
+
+> python analyse-tools/userspace-tool.py --file [filename] [--save-image] [--show-image] [--interact]
+
+# Time Sync
 
 > sudo ntpdate time.nist.gov
 

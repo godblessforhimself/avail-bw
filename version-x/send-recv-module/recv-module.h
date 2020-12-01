@@ -19,7 +19,7 @@ void parse_parameter(int argc, char *argv[]);
 void initialize();
 void exchange_parameter();
 void udp_receiving();
-void udp_receive_packet(int packet_size, int packet_number);
+void udp_receive_packet(int packet_size, int packet_number, timestamp_packet *timestamp_array);
 void save_timestamp();
 void write2file(timestamp_packet *array, int number, string filename);
 void clean();

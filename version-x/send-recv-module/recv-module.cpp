@@ -6,7 +6,7 @@
 #include <iostream>
 #include <fstream>
 #include <iomanip>
-int listen_fd = -1, conn_fd = -1, udp_fd = -1, packet_number = -1, packet_size = 1472, listen_port = 11106, load_number = -1, inspect_number = -1;
+int listen_fd = -1, conn_fd = -1, udp_fd = -1, packet_number = -1, packet_size = 1472, listen_port = 11106, load_number = -1, inspect_number = -1, inspect_size = -1;
 socklen_t sock_len = 0;
 sockaddr_in dest_address, src_address;
 char udpbuffer[10000];
@@ -109,15 +109,16 @@ void exchange_parameter() {
 		printf("recv sender parameter not enough %zd\n", ret);
 		exit(0);
 	}
-	control_parameter control_instance(0, 0, 0);
+	control_parameter control_instance(0, 0, 0, 0);
 	memcpy(&control_instance, udpbuffer, sizeof(control_parameter));
 	control_instance.network2host();
 	packet_size = control_instance.packet_size;
 	load_number = control_instance.load_number;
 	inspect_number = control_instance.inspect_number;
+	inspect_size = control_instance.inspect_size;
 
 	if (true) {
-		printf("receiver receives sender parameter: %d, %d, %d\n", packet_size, load_number, inspect_number);
+		printf("receiver receives sender parameter: %d, %d, %d, %d\n", packet_size, load_number, inspect_number, inspect_size);
 	}
 	// send ready signal
 	memset(udpbuffer, 0, sizeof(udpbuffer));
@@ -134,9 +135,10 @@ void exchange_parameter() {
 }
 void udp_receiving() {
 	receive_array = new timestamp_packet[load_number + inspect_number];
-	udp_receive_packet(packet_size, load_number + inspect_number);
+	udp_receive_packet(packet_size, load_number, receive_array);
+	udp_receive_packet(inspect_size, inspect_number, receive_array+load_number);
 }
-void udp_receive_packet(int packet_size, int packet_number) {
+void udp_receive_packet(int packet_size, int packet_number, timestamp_packet *timestamp_array) {
 	ssize_t ret;
 	timespec receive_timestamp;
 	clock_gettime(clock_to_use, &receive_timestamp);
@@ -146,9 +148,9 @@ void udp_receive_packet(int packet_size, int packet_number) {
 		clock_gettime(clock_to_use, &receive_timestamp);
 		current_time = timespec2double(receive_timestamp);
 		if (ret == packet_size) {
-			receive_array[i] = *(timestamp_packet*)udpbuffer;
-			receive_array[i].network2host();
-			receive_array[i].timestamp[1] = timespec2double(receive_timestamp);
+			timestamp_array[i] = *(timestamp_packet*)udpbuffer;
+			timestamp_array[i].network2host();
+			timestamp_array[i].timestamp[1] = timespec2double(receive_timestamp);
 			i++;
 		} else if (current_time - begin_time > 10) {
 			printf("Receive Timeout\n");

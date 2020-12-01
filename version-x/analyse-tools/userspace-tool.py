@@ -44,15 +44,20 @@ def diff(x):
 gin=diff(data[:,0])
 gout=diff(data[:,1])
 owd=data[:,1]-data[:,0]
-owdd=owd-owd[0]
-oowd=owdd[100:]
+oowd=owd[100:]
+timestamp=(data[:,0]-data[0,0])
 if args.show_image:
-	plt.plot(owdd)
+	plt.scatter(timestamp, owd, s=1)
+	plt.grid()
 	plt.show()
 if args.save_image:
-	plt.plot(oowd)
-	plt.xticks(np.arange(10))
-	plt.ylim((owdd.min()-1,owdd.max()+1))
+	plt.figure(figsize=(10,5))
+	plt.subplot(1,2,1)
+	plt.scatter(timestamp,owd,s=1)
+	plt.subplot(1,2,2)
+	plt.scatter(timestamp[load_number:],oowd,s=1)
+	plt.grid()
+	#plt.ylim((owdd.min()-1,owdd.max()+1))
 	output_filename=remove_suffix(args.file)+'.png'
 	plt.savefig(output_filename,bbox_inches='tight')
 if False:
