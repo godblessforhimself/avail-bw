@@ -56,6 +56,7 @@ def estimate_abw():
 		consider_count=inspect_number
 	elif fully_recover:
 		recover_time_upper_bound=send_time[load_number+fully_recover_index+1]-send_time[0]
+		recover_time_lower_bound=send_time[load_number+fully_recover_index]-send_time[0]
 		if fully_recover_index==0:
 			print('only one point, use second point as time')
 			recover_time=send_time[load_number+1]-send_time[0]
@@ -74,15 +75,18 @@ def estimate_abw():
 	last_recover_time=recover_time[-2,-1]
 	long_recover_time=recover_time[0,-1]
 	positive_recover_time=non_zero(last_recover_time,long_recover_time,min_recover_time,max_recover_time)
-	if fully_recover and positive_recover_time>recover_time_upper_bound:
-		positive_recover_time=recover_time_upper_bound
-		print('estimate exceed real value')
 	if positive_recover_time<=0:
 		return -1
 	if fully_recover:
 		packet_byte=load_number*packet_size+(fully_recover_index+1)*inspect_size
+		abw_lb=get_rate(recover_time_upper_bound,packet_byte)
+		abw_ub=get_rate(recover_time_lower_bound,packet_byte)
+		print('recover[lower bound {:.2f}, upper bound {:.2f}]'.format(abw_lb,abw_ub))
 	else:
 		packet_byte=load_number*packet_size + inspect_number*inspect_size
+	#if fully_recover and (positive_recover_time>recover_time_upper_bound or positive_recover_time < recover_time_lower_bound):
+	#	return -1
+	code.interact(local=dict(globals(),**locals()))
 	abw=get_rate(positive_recover_time,packet_byte)
 	return abw
 # tool end
@@ -118,7 +122,7 @@ def parse():
 	packet_size=args.psz
 	inspect_size=args.isz
 	print('Predict at {}'.format(args.file))
-	
+
 def read():
 	global send_time,recv_time,inspect_number,owd,inspect_owd,inspect_rate
 	try:
@@ -139,8 +143,28 @@ def read():
 	inspect_owd=owd[load_number:]
 	
 def smooth():
-
-	pass
+	global send_time,recv_time,load_number
+	send,recv,ldn=send_time,recv_time,load_number
+	delta=lambda x:x[1:]-x[:-1]
+	gin,gout=delta(send[:ldn]),delta(recv[:ldn])
+	#smooth gin
+	m1=np.mean(gin[1:])
+	gin[0]=m1
+	send[0]=send[1]-gin[0]
+	#smooth gout
+	median=np.median(gout)
+	std=np.std(gout)
+	cond=np.logical_and(gout>=median-std,gout<=median+std)
+	valid=gout[np.where(cond)]
+	m2,std=np.mean(valid),np.std(valid)
+	for i in range(ldn-1):
+		if gout[i]<m2-std or gout[i]>m2+std:
+			gout[i]=m2
+		else:
+			for j in range(i-1,0-1,-1):
+				recv[j]=recv[j+1]-gout[j]
+			break
+	send_time,recv_time=send,recv
 def upper_bound():
 	global send_rate,receive_rate,rate_change,lower_bound,upper_bound
 	send_rate=get_rate(send_time[load_number-1]-send_time[0],packet_size*(load_number-1))

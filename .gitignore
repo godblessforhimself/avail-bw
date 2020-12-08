@@ -17,3 +17,4 @@ nohup.out
 *.png
 data
 version-x/send-recv-module/build
+__pycache__

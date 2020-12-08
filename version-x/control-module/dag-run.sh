@@ -15,5 +15,4 @@ sleep 5s
 ssh -p 3970 amax@aliyun.ylxdzsw.com \
 "sudo dagconvert -T erf:pcap -i ${DAG_FILENAME} -b 'src host 192.168.2.3 and dst host 192.168.5.1 and udp' -f c -o ${IN_PCAP} 1>>${LOG_FILENAME} 2>&1; tshark -r ${IN_PCAP} -Tfields -e frame.time_epoch > ${DATA_DIR}/in.txt; sudo dagconvert -T erf:pcap -i ${DAG_FILENAME} -b 'src host 192.168.2.3 and dst host 192.168.5.1 and udp' -f d -o ${OUT_PCAP} 1>>${LOG_FILENAME} 2>&1; tshark -r ${OUT_PCAP} -Tfields -e frame.time_epoch > ${DATA_DIR}/out.txt;"
 
-
 printf "Finish\n"

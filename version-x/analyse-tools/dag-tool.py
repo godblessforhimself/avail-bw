@@ -5,15 +5,17 @@ import matplotlib.pyplot as plt
 def diff(x):
 	return x[1:]-x[:-1]
 
-din,dout=np.loadtxt('data/in.txt'), np.loadtxt('data/out.txt')
-const=din[0]
-din=din-const
-dout=dout-const
-din=din*1e6
-dout=dout*1e6
-gin=diff(din)
-gout=diff(dout)
-owd=dout-din
+send,recv=np.loadtxt('data/in.txt'), np.loadtxt('data/out.txt')
+const=send[0]
+send=send-const
+recv=recv-const
+send=send*1e6
+recv=recv*1e6
+send=send.astype(np.int32)
+recv=recv.astype(np.int32)
+gin=diff(send)
+gout=diff(recv)
+owd=recv-send
 if False:
 	plt.subplot(2,2,1)
 	plt.plot(gin)
