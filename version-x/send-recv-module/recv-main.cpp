@@ -5,6 +5,7 @@
 #include "util.h"
 
 int main(int argc, char *argv[]) {
+	tick();
 	parse_parameter(argc, argv);
 	// initialize tcp listen socket and wait
 	initialize();
@@ -15,4 +16,5 @@ int main(int argc, char *argv[]) {
 	// save to file
 	save_timestamp();
 	clean();
+	tock();
 }

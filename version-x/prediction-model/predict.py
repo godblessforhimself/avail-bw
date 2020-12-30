@@ -2,197 +2,196 @@
 timestamp file format
 time precision = 6
 sendtime,space,recvtime for n line
+python prediction-model/predict.py --file data/exp1/0.txt --ln 100 --psz 1472 --isz 1472 --interact 
 '''
-import argparse,code
+import argparse,code,sys
 import numpy as np
+# to import util
+import os
+o_path = os.getcwd()
+sys.path.append(o_path)
+import library.util as util
+logFile=sys.stdout
+saveFile=sys.stdout
 
-# tool functions
+def read(filename):
+	data=np.loadtxt(filename)
+	send=data[:,0]
+	recv=data[:,1]
+	return send,recv
+
 def get_rate(time_second,packet_byte):
+	assert(time_second>0)
 	rate=packet_byte*8/(time_second*1e6)
 	return rate
-def norm(x):
-	mean=np.mean(x)
-	std=np.std(x)
-	return (x-mean)/std
+
 def linear(x1,x2,y1,y2,y):
-	if y1==y2:
-		return None
+	assert(y1!=y2)
 	x=x2+(x1-x2)*(y-y2)/(y1-y2)
 	return x
-def non_zero(*arr):
-	for i in arr:
-		if i!=0:
-			return i
-	return None
-def estimate_abw():
-	# extreme cases:
-	# 1. inspect owd is increasing caused by abw < inspect rate. So upper bound = inspect rate.
-	# 2. inspect owd is decreasing but not fully recovered. So use last two points to estimate recover time
-	# 3. inspect owd is decreasing and fully recovered. So find the index that fully recovered, and use last two before the index
-	# connect every two point, get the recover time
-	# sort it to get upper and lower bound
-	# use the last two point as result
-	global load_number,inspect_number,inspect_owd,send_time,packet_size,recover_time,owd_min,inspect_upper_bound
-	if inspect_owd[-1]/inspect_owd[0]>=1:
-		# owd increasing
-		inspect_upper_bound=inspect_rate
-		print('inspect upper bound {:.2f}'.format(inspect_upper_bound))
-		return -1
-	# we define 'fully recover' as owd is 5% around min owd
-	fully_recover=False
-	if owd_min<inspect_owd[0]:
-		owd_decrease=inspect_owd[0]-owd_min
-		bound=0.05*owd_decrease
-		if owd_min-bound<=inspect_owd[-1] and inspect_owd[-1]<=owd_min+bound:
-			fully_recover=True
-			fully_recover_index=inspect_number-1
-			while inspect_owd[fully_recover_index]<=owd_min+bound:
-				fully_recover_index-=1
-				if fully_recover_index==0: 
-					print('owd increase not obvious')
-					break
-	
-	if not fully_recover:	
-		consider_count=inspect_number
-	elif fully_recover:
-		recover_time_upper_bound=send_time[load_number+fully_recover_index+1]-send_time[0]
-		recover_time_lower_bound=send_time[load_number+fully_recover_index]-send_time[0]
-		if fully_recover_index==0:
-			print('only one point, use second point as time')
-			recover_time=send_time[load_number+1]-send_time[0]
-			return recover_time
-		consider_count=fully_recover_index+1
-	recover_time=np.zeros((consider_count,consider_count))
-	for i in range(consider_count):
-		for j in range(consider_count):
-			if i>=j: continue
-			temp=linear(send_time[load_number+i],send_time[load_number+j],inspect_owd[i],inspect_owd[j],owd_min)
-			recover_time[i,j]=0 if temp is None else temp
-	recover_time=np.where(recover_time>0,recover_time-send_time[0],0)
-	recover_time_sorted=np.sort(recover_time,axis=None)
-	min_recover_time=recover_time_sorted[0]
-	max_recover_time=recover_time_sorted[-1]
-	last_recover_time=recover_time[-2,-1]
-	long_recover_time=recover_time[0,-1]
-	positive_recover_time=non_zero(last_recover_time,long_recover_time,min_recover_time,max_recover_time)
-	if positive_recover_time<=0:
-		return -1
-	if fully_recover:
-		packet_byte=load_number*packet_size+(fully_recover_index+1)*inspect_size
-		abw_lb=get_rate(recover_time_upper_bound,packet_byte)
-		abw_ub=get_rate(recover_time_lower_bound,packet_byte)
-		print('recover[lower bound {:.2f}, upper bound {:.2f}]'.format(abw_lb,abw_ub))
+
+def getEstimate(inspect_owd,recover_index,owd_min,t1,t2,send,error=0):
+	# if recover_index=-1, not fully recover
+	# t1 = -1 , ret<t2
+	# t2 = -1 , ret>t1
+	# t1>0 and t2>0, t1<ret<t2
+	L=len(inspect_owd)
+	loadNumber=len(send)-L
+	if recover_index==-1:
+		node=L-2
+		end=L-1
 	else:
-		packet_byte=load_number*packet_size + inspect_number*inspect_size
-	#if fully_recover and (positive_recover_time>recover_time_upper_bound or positive_recover_time < recover_time_lower_bound):
-	#	return -1
-	code.interact(local=dict(globals(),**locals()))
-	abw=get_rate(positive_recover_time,packet_byte)
-	return abw
-# tool end
-# global declaration
-args=0
-load_number=0
-packet_size=0
-send_time=0
-recv_time=0
-owd=0
-inspect_owd=0
-inspect_number=0
-inspect_upper_bound=0
-inspect_rate=0
-send_rate=0
-receive_rate=0
-rate_change=0
-lower_bound=0
-upper_bound=0
-owd_min=0
-inspect_size=0
-# global end
-def parse():
-	global args,load_number,packet_size,inspect_size
+		node=recover_index-2
+		end=recover_index-1
+	while node>=0:
+		for i in range(end,node,-1):
+			if inspect_owd[node]==inspect_owd[i]:
+				continue
+			t_i=linear(send[node+loadNumber],send[i+loadNumber],inspect_owd[node],inspect_owd[i],owd_min)
+			if (t1==-1 or t_i>t1-error) and (t2==-1 or t_i<t2+error):
+				return True,t_i-send[0]
+		node-=1
+	
+	return False,-1
+	
+def initialBoundary(send_time,recv_time,owd,load_number,packet_size):
+	# load stage:
+	# if owd ++, A<v, let upper_bound=vout
+	# if owd ==, A>v, let lower_bound=vin
+	send_rate=get_rate(send_time[load_number-1]-send_time[0],packet_size*(load_number-1))
+	receive_rate=get_rate(recv_time[load_number-1]-recv_time[0],packet_size*(load_number-1))
+	dowd=util.delta(owd[:load_number])
+	median_dowd=np.median(dowd)
+	dowd_max=owd[load_number-1]-owd[0]
+	rate_change=(receive_rate-send_rate)/send_rate
+	lower_bound=upper_bound=-1
+	hasLowerBound=hasUpperBound=False
+	# flag1: receive rate not change
+	# flag2: owd not increase
+	flag1=flag2=False 
+	if rate_change>-0.05:
+		# receive rate remains the same
+		flag1=True
+	else:
+		flag1=False
+	if dowd_max<=0:
+		flag2=True
+	elif dowd_max>0:
+		if median_dowd>0:
+			z=dowd_max/median_dowd/load_number
+			if z<0.5:
+				flag2=True
+		elif median_dowd<=0:
+			flag2=True
+			logFile.write('Weird load owd\n')
+	if flag1 and flag2:
+		hasLowerBound=True
+	elif not flag1 and not flag2:
+		hasUpperBound=True
+	elif flag1 and not flag2:
+		logFile.write('receive rate little change, owd obvious increase\n')
+	elif not flag1 and flag2:
+		logFile.write('receive rate increase, owd not change\n')
+	if hasLowerBound:
+		lower_bound=send_rate
+	elif hasUpperBound:
+		upper_bound=receive_rate
+	logFile.write('send rate {:.2f}, receive rate {:.2f}, rate change {:.2%}\n'.format(send_rate,receive_rate,rate_change))
+	logFile.write('lower bound {:.2f}, upper bound {:.2f}\n'.format(lower_bound, upper_bound))
+	return lower_bound,upper_bound
+
+def estimate_abw(inspect_owd,inspect_rate,owd_min,load_number,packet_size,inspect_size,send_time):
+	# 1. inspect owd increasing: A < v(inspect) -> U = v(inspect) -> return -1,-1,U
+	# 2. inspect owd decreasing & not recovered -> L=v(inspect) U=P/tmax -> return E,L,U
+	# 3. inspect owd decreasing & recovered -> L=P/tmax, U=P/tmin -> return E,L,U
+
+	# owd increasing
+	if inspect_owd[-1]>=inspect_owd[0]:
+		inspect_upper_bound=inspect_rate
+		logFile.write('inspect owd increasing, upper bound {:.2f}\n'.format(inspect_upper_bound))
+		return -1,-1,inspect_upper_bound
+	# 'recovered': the first time owd is 5% around min owd
+	fully_recover,fully_recover_index=util.findRecoverIndex(inspect_owd,owd_min,logFile,0.05)
+	if fully_recover:
+		timeLowerBoundary=send_time[load_number+fully_recover_index-1]
+		timeUpperBoundary=send_time[load_number+fully_recover_index]
+		permissibleError=(timeUpperBoundary-timeLowerBoundary)*0.6
+		abwLowerBoundary=util.roughAbw(load_number,fully_recover_index+1,timeUpperBoundary,packet_size,inspect_size)
+		abwUpperBoundary=util.roughAbw(load_number,fully_recover_index,timeLowerBoundary,packet_size,inspect_size)
+		assert(abwLowerBoundary<abwUpperBoundary)
+		canEstimate=fully_recover_index>2
+		if canEstimate:
+			ret,timeEstimate=getEstimate(inspect_owd,fully_recover_index,owd_min,timeLowerBoundary,timeUpperBoundary,send_time,permissibleError)
+			#code.interact(local=dict(globals(),**locals()))
+			if ret:
+				abwEstimate=util.roughAbw(load_number,fully_recover_index,timeEstimate,packet_size,inspect_size)
+				logFile.write('inspect owd recovered t:{:.6f}<{:.6f}<{:.6f}, a:{:.2f}<{:.2f}<{:.2f}\n'.format(timeLowerBoundary,timeEstimate,timeUpperBoundary,abwLowerBoundary,abwEstimate,abwUpperBoundary))
+				return abwEstimate,abwLowerBoundary,abwUpperBoundary
+			else:
+				logFile.write('inspect owd recovered no valid estimation. t:{:.6f}<{:.6f}, a:{:.2f}<{:.2f}\n'.format(timeLowerBoundary,timeUpperBoundary,abwLowerBoundary,abwUpperBoundary))
+				return -1,abwLowerBoundary,abwUpperBoundary
+		else:
+			logFile.write('inspect owd recovered {:d}. t:{:.6f}<{:.6f}, a:{:.2f}<{:.2f}\n'.format(fully_recover_index,timeLowerBoundary,timeUpperBoundary,abwLowerBoundary,abwUpperBoundary))
+			return -1,abwLowerBoundary,abwUpperBoundary
+	elif not fully_recover:	
+		abwLowerBoundary=inspect_rate
+		abwUpperBoundary=util.roughAbw(load_number,len(inspect_owd),send_time[-1],packet_size,inspect_size)
+		ret,timeEstimate=getEstimate(inspect_owd,-1,owd_min,send_time[-1],-1,send_time)
+		if ret:
+			abwEstimate=util.roughAbw(load_number,len(inspect_owd),timeEstimate,packet_size,inspect_size)
+			logFile.write('inspect owd not recovered t:{:.6f}<{:.6f}, a:{:.2f}<{:.2f}<{:.2f}\n'.format(send_time[-1],timeEstimate,abwLowerBoundary,abwEstimate,abwUpperBoundary))
+			return abwEstimate,abwLowerBoundary,abwUpperBoundary
+		else:
+			logFile.write('inspect owd not recovered t:>{:.6f}, a:{:.6f}<{:.2f}\n'.format(send_time[-1],abwLowerBoundary,abwUpperBoundary))
+			return -1,abwLowerBoundary,abwUpperBoundary
+def safe_exit(code):
+	if logFile!=sys.stdout:
+		logFile.close()
+	if saveFile!=sys.stdout:
+		saveFile.close()
+	exit(code)
+
+if __name__=='__main__':
 	parser = argparse.ArgumentParser(description='parser')
 	parser.add_argument('--file', type=str)
 	parser.add_argument('--ln', help='load packet number', type=int, default=100)
 	parser.add_argument('--psz',help='load packet size',default=1472,type=int)
 	parser.add_argument('--isz',help='inspect packet size',default=24,type=int)
+	parser.add_argument('--log',help='log filename(append mode)',default='',type=str)
+	parser.add_argument('--output',help='output filename(append mode)',default='',type=str)
 	parser.add_argument('--interact', action='store_true')
 	args = parser.parse_args()
 	load_number=args.ln
 	packet_size=args.psz
 	inspect_size=args.isz
-	print('Predict at {}'.format(args.file))
+	if args.log!='':
+		logFile=open(args.log,'a')
+	if args.output!='':
+		saveFile=open(args.output,'a')
 
-def read():
-	global send_time,recv_time,inspect_number,owd,inspect_owd,inspect_rate
-	try:
-		timestamp=np.loadtxt(args.file)
-	except:
-		print('file not found')
-		exit(0)
+	if os.path.isfile(args.file):
+		send,recv=read(args.file)
 	else:
-		pass
-	send_time=timestamp[:,0]
-	recv_time=timestamp[:,1]
-	owd=recv_time-send_time
-	inspect_number=len(send_time)-load_number
-	inspect_rate=get_rate(send_time[-1]-send_time[load_number],(inspect_number-1)*packet_size)
+		logFile.write('file {} not exist\n'.format(args.file))
+		safe_exit(-1)
+	inspect_number=len(send)-load_number
 	if inspect_number<0:
-		print('inspect number {}'.format(inspect_number))
-		exit(0)
-	inspect_owd=owd[load_number:]
-	
-def smooth():
-	global send_time,recv_time,load_number
-	send,recv,ldn=send_time,recv_time,load_number
-	delta=lambda x:x[1:]-x[:-1]
-	gin,gout=delta(send[:ldn]),delta(recv[:ldn])
-	#smooth gin
-	m1=np.mean(gin[1:])
-	gin[0]=m1
-	send[0]=send[1]-gin[0]
-	#smooth gout
-	median=np.median(gout)
-	std=np.std(gout)
-	cond=np.logical_and(gout>=median-std,gout<=median+std)
-	valid=gout[np.where(cond)]
-	m2,std=np.mean(valid),np.std(valid)
-	for i in range(ldn-1):
-		if gout[i]<m2-std or gout[i]>m2+std:
-			gout[i]=m2
-		else:
-			for j in range(i-1,0-1,-1):
-				recv[j]=recv[j+1]-gout[j]
-			break
-	send_time,recv_time=send,recv
-def upper_bound():
-	global send_rate,receive_rate,rate_change,lower_bound,upper_bound
-	send_rate=get_rate(send_time[load_number-1]-send_time[0],packet_size*(load_number-1))
-	receive_rate=get_rate(recv_time[load_number-1]-recv_time[0],packet_size*(load_number-1))
-	rate_change=(receive_rate-send_rate)/send_rate
-	if rate_change>-0.05:
-		lower_bound=send_rate
-		upper_bound=0
-	else:
-		upper_bound=receive_rate
-		lower_bound=0
-	print('send rate {:.2f}, receive rate {:.2f}, rate change {:.2%}'.format(send_rate,receive_rate,rate_change))
-	print('lower bound {:.2f}, upper bound {:.2f}'.format(lower_bound, upper_bound))
-def cluster_or_min():
-	global owd_min
+		logFile.write('load number {}, inspect number {} < 0\n'.format(load_number,inspect_number))
+		safe_exit(-1)
+	send,recv=util.smooth(send,recv,load_number)
+	send,recv,owd=util.remove_offset(send,recv)
 	owd_min=np.min(owd)
-def locate_or_guess():
-	abw=estimate_abw()
-	if abw>0:
-		print('abw {:.2f}'.format(abw))
-	
-def main():
-	parse()
-	read()
-	smooth()
-	upper_bound()
-	cluster_or_min()
-	locate_or_guess()
+	inspect_rate=get_rate(send[-1]-send[load_number],(inspect_number-1)*inspect_size)
+	inspect_owd=owd[load_number:]
+	lowerBoundary,upperBoundary=initialBoundary(send,recv,owd,load_number,packet_size)
+	E,L,U=estimate_abw(inspect_owd,inspect_rate,owd_min,load_number,packet_size,inspect_size,send)
+	L=max(lowerBoundary,L)
+	if upperBoundary!=-1 and U!=-1:
+		U=min(upperBoundary,U)
+	elif upperBoundary==-1 and U!=-1:
+		U=U
+	elif upperBoundary!=-1 and U==-1:
+		U=upperBoundary
+	saveFile.write('E {:.2f} L {:.2f} U {:.2f}\n'.format(E,L,U))
+	safe_exit(0)
 
-if __name__=='__main__':
-	main()

@@ -7,7 +7,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 extern int tcp_fd, udp_fd, load_number, packet_size, dest_port, inspection_number;
-extern double send_speed, inspection_time[100];
+extern double send_speed, inspection_time[10000];
 extern char dest_ip_string[20], udpbuffer[10000];
 extern sockaddr_in dest_address, src_address;
 extern socklen_t sock_len;

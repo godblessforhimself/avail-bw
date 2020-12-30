@@ -1,1 +1,1 @@
-taskset -c 3 ./send-main --speed 1500 --load-size 1472 --inspect-size 1472 --dest 192.168.5.1 --port 11106 --number 100 --inspect 800 1000 1200 1400 1600 1800 2000 2200 2400 2600
+taskset -c 23 ./send-main --speed 1500 --load-size 1472 --inspect-size 1472 --dest 192.168.5.1 --port 11106 --number 100 --inspect 800 1000 1200 1400 1600 1800 2000 2200 2400 2600

@@ -1,3 +1,15 @@
+# 参数更新
+param_list=[default]
+data_list=[]
+while True:
+	cond=judge(data_list[-1])
+	if cond:
+		break
+	new_data=run(param_list[-1])
+	new_param=suggest(new_data)
+	data_list.append(new_data)
+	param_list.append(new_param)
+
 # 问题分析
 
 load size 与 inspect size 不相同时，最小单向延迟是不相同的。

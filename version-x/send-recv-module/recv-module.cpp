@@ -135,8 +135,10 @@ void exchange_parameter() {
 }
 void udp_receiving() {
 	receive_array = new timestamp_packet[load_number + inspect_number];
-	udp_receive_packet(packet_size, load_number, receive_array);
-	udp_receive_packet(inspect_size, inspect_number, receive_array+load_number);
+	if (load_number > 0)
+		udp_receive_packet(packet_size, load_number, receive_array);
+	if (inspect_number > 0)
+		udp_receive_packet(inspect_size, inspect_number, receive_array+load_number);
 }
 void udp_receive_packet(int packet_size, int packet_number, timestamp_packet *timestamp_array) {
 	ssize_t ret;

@@ -1,1 +1,1 @@
-rsync -avz -e 'ssh -p 3970' --exclude="build/" --exclude="data/" --exclude="library/" ../version-x amax@aliyun.ylxdzsw.com:~/jintao_test
+rsync -avz -e 'ssh -p 3970' --exclude="build/" --exclude="data/" --exclude="library/" ../version-x amax@aliyun.ylxdzsw.com:~/jintao_test >/dev/null

@@ -2,7 +2,10 @@ import code,sys
 import numpy as np
 import matplotlib.pyplot as plt
 import argparse
-
+import os
+o_path = os.getcwd()
+sys.path.append(o_path)
+import library.util as util
 parser = argparse.ArgumentParser(description='parser')
 parser.add_argument('--file', type=str)
 parser.add_argument('--ldn', help='load number', type=int, default=100)
@@ -15,27 +18,7 @@ args = parser.parse_args()
 def remove_suffix(s):
 	idx=s.find('.')
 	return s[:idx]
-def smooth(send,recv,ldn):
-	delta=lambda x:x[1:]-x[:-1]
-	gin,gout=delta(send[:ldn]),delta(recv[:ldn])
-	#smooth gin
-	m1=np.mean(gin[1:])
-	gin[0]=m1
-	send[0]=send[1]-gin[0]
-	#smooth gout
-	median=np.median(gout)
-	std=np.std(gout)
-	cond=np.logical_and(gout>=median-std,gout<=median+std)
-	valid=gout[np.where(cond)]
-	m2,std=np.mean(valid),np.std(valid)
-	for i in range(ldn-1):
-		if gout[i]<m2-std or gout[i]>m2+std:
-			gout[i]=m2
-		else:
-			for j in range(i-1,0-1,-1):
-				recv[j]=recv[j+1]-gout[j]
-			break
-	return send,recv
+
 path='data/output.txt'
 if args.file:
 	path=args.file
@@ -46,7 +29,7 @@ load_number=args.ldn
 inspect_number=args.isn
 
 send,recv=data[:,0],data[:,1]
-send,recv=smooth(send,recv,load_number)
+send,recv=util.smooth(send,recv,load_number)
 offset=send[0]
 send-=offset
 recv-=offset

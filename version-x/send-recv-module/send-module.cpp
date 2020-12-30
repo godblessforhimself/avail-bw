@@ -1,12 +1,14 @@
 /*
 	taskset -c 3 ./send-main --speed 1500 --load-size 1472 --inspect-size 24 --dest 192.168.5.1 --port 11106 --number 100 --inspect 800 1000 1200 1400 1600 1800 2000 2200 2400 2600
+	--inspect-ranger 1000 100 2000
 */
 #include "send-module.h"
 #include "util.h"
 #include <algorithm>
 
 int tcp_fd = -1, udp_fd = -1, load_number = 100, packet_size = 1472, dest_port = 11106, inspection_number = 0, inspect_size = 1472;
-double send_speed = 0, inspection_time[100];
+double send_speed = 0, inspection_time[10000];
+double ranger_begin, ranger_step, ranger_end;
 char dest_ip_string[20] = "192.168.5.1", udpbuffer[10000];
 sockaddr_in src_address, dest_address;
 socklen_t sock_len = sizeof(sockaddr_in);
@@ -24,6 +26,7 @@ int parse_args(int argc, char *argv[]) {
 		{"dest",    required_argument, 0,  0 },
 		{"port",    required_argument, 0,  0 },
 		{"inspect", required_argument, 0,  0 },
+		{"inspect-ranger", required_argument, 0, 0},
 		{0,         0,                 0,  0 }
 	};
 	#define ARG_EQUAL(x) (strncmp(long_options[option_index].name, (x), max_opt_length) == 0)
@@ -54,6 +57,16 @@ int parse_args(int argc, char *argv[]) {
 						inspection_time[inspection_number] = atof(argv[optind]);
 						inspection_number++;
 					}	
+				} else if (ARG_EQUAL("inspect-ranger")) {
+					optind--;
+					ranger_begin = atof(argv[optind]);
+					ranger_step = atof(argv[optind+1]);
+					ranger_end = atof(argv[optind+2]);
+					inspection_number = 0;
+					for( ;ranger_begin<=ranger_end; ranger_begin+=ranger_step){
+						inspection_time[inspection_number] = ranger_begin;
+						inspection_number++;
+					}	
 				}
                 break;    
 			default:
@@ -74,11 +87,8 @@ int parse_args(int argc, char *argv[]) {
 	}
 	if (true) {
 		printf("speed %.2f, size %d, number %d, recv ip %s, recv port %d\n", send_speed, packet_size, load_number, dest_ip_string, dest_port);
-		printf("inspection time list:");
-		for (int i = 0; i < inspection_number; i++){
-			printf(" %.2f", inspection_time[i]);
-		}
-		printf("\n");
+		if (inspection_number>0)
+			printf("inspection time: %.2f-%.2f\n", inspection_time[0], inspection_time[inspection_number-1]);
 	}
 	printf("-------Parse Arg End---------\n");
     return 0;
@@ -144,9 +154,9 @@ void send_load() {
 		The problem is whether the rate is achievable. If it is, then how much is the delay or difference between user space sending time and hardware sending time.
 
 	*/
-	if (send_speed == 0.0) {
-		printf("Rate 0 is not supported\n");
-		exit(0);
+	if (send_speed == 0.0 || load_number == 0) {
+		clock_gettime(clock_to_use, &start_time);
+		return;
 	} else if (send_speed > 0) {
 		if (send_speed >= 2000.0) {
 			printf("High precision on rate more than 2000Mbps is hard\n");
@@ -157,6 +167,9 @@ void send_load() {
 	}
 }
 void send_inspect() {
+	if (inspection_number <= 0) {
+		return;
+	}
 	ssize_t ret;
 	double current_time_us, current_time_double, start_time_us = timespec2double(start_time) * 1e6, elapse_time_us;
 	clock_gettime(clock_to_use, &current_time);
@@ -192,11 +205,60 @@ void send_at_speed(double speed, int packet_size, int packet_number) {
 		printf("packet size should be larger than %zd\n", min_size);
 		exit(0);
 	}
-	clock_gettime(clock_to_use, &start_time);
 	memset(udpbuffer, 0, sizeof(udpbuffer));
-	double current_speed, elapse_time_us, current_time_double, start_time_double = timespec2double(start_time);
-	int packet_sent = 0;
-	while (true) {
+	double packet_gap_us, current_speed, elapse_time_us, current_time_double, start_time_double;
+	int packet_sent = 0, head_number=10;
+	packet_gap_us = double(packet_size * 8) / speed;
+
+	clock_gettime(clock_to_use, &start_time);
+	if (packet_number==0) {
+		return;
+	}
+	start_time_double = timespec2double(start_time);
+	// send 1 packet
+	tpacket_temp.update(packet_sent, start_time_double);
+	memcpy(udpbuffer, &tpacket_temp, sizeof(timestamp_packet));
+	ret = send(udp_fd, udpbuffer, packet_size, 0);
+	if (ret != (ssize_t)packet_size) {
+		perror("Sender udp send:");
+	} 
+	packet_sent++;
+	if (packet_number < head_number) {
+		for (; packet_sent < packet_number; packet_sent++) {
+			clock_gettime(clock_to_use, &current_time);
+			current_time_double = timespec2double(current_time);
+			elapse_time_us = (current_time_double - start_time_double) * 1e6;
+			if (elapse_time_us >= packet_sent * packet_gap_us) {
+				tpacket_temp.update(packet_sent, current_time_double);
+				memcpy(udpbuffer, &tpacket_temp, sizeof(timestamp_packet));
+				ret = send(udp_fd, udpbuffer, packet_size, 0);
+				if (ret != (ssize_t)packet_size) {
+					perror("Sender udp send:");
+					packet_sent--;
+				} 
+			} else {
+				packet_sent--;
+			}
+		}
+	} else {
+		for (; packet_sent < head_number; packet_sent++) {
+			clock_gettime(clock_to_use, &current_time);
+			current_time_double = timespec2double(current_time);
+			elapse_time_us = (current_time_double - start_time_double) * 1e6;
+			if (elapse_time_us >= packet_sent * packet_gap_us) {
+				tpacket_temp.update(packet_sent, current_time_double);
+				memcpy(udpbuffer, &tpacket_temp, sizeof(timestamp_packet));
+				ret = send(udp_fd, udpbuffer, packet_size, 0);
+				if (ret != (ssize_t)packet_size) {
+					perror("Sender udp send:");
+					packet_sent--;
+				} 
+			} else {
+				packet_sent--;
+			}
+		}
+	}
+	while (packet_sent < packet_number) {
 		clock_gettime(clock_to_use, &current_time);
 		current_time_double = timespec2double(current_time);
 		elapse_time_us = current_time_double - start_time_double;
@@ -210,9 +272,6 @@ void send_at_speed(double speed, int packet_size, int packet_number) {
 				perror("Sender udp send:");
 			} 
 			packet_sent += 1;
-			if (packet_sent == packet_number) {
-				break;
-			}
 		}
 	}
 	printf("------Send End------\n");

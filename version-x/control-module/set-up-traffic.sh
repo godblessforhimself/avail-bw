@@ -6,12 +6,12 @@ SetUpIperf3(){
     fi
     COMP=$(echo "${1}==0"|bc)
     if [ ${COMP} -eq 1 ]; then
-        printf "traffic is zero, skip\n"
+        printf "SetUpTraffic 0\n"
         return 0
     fi
-    ssh zhufengtian@192.168.67.5 "pkill iperf3;nohup iperf3 -sfm -V 1>~/jintao_test/iperf.log 2>&1 &"
-    ssh haha@192.168.67.4 "pkill iperf3; nohup iperf3 -c 192.168.5.1 -ub ${1}M -l 1472 -t 1000 --pacing-timer 0 1>~/jintao_test/iperf.log 2>&1 &"
-    printf "SetUpIperf3 ${1}Mbps\n"
+    ssh zhufengtian@192.168.67.5 "pkill iperf3;nohup iperf3 -sfm -V 1>~/jintao_test/iperf.log 2>&1 &" >/dev/null
+    ssh haha@192.168.2.4 "pkill iperf3; nohup iperf3 -c 192.168.5.1 -ub ${1}M -l 1472 -t 36000 --pacing-timer 0 1>~/jintao_test/iperf.log 2>&1 &" >/dev/null
+    printf "SetUpTraffic ${1}Mbps\n"
 }
 
 SetUpIperf3 $@

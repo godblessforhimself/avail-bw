@@ -1,25 +1,10 @@
 import code,sys
 import numpy as np
 import matplotlib.pyplot as plt
-
-def smooth(gin,gout):
-	#smooth gin
-	m1=np.mean(gin[1:])
-	gin[0]=m1
-	#smooth gout
-	median=np.median(gout)
-	std=np.std(gout)
-	cond=np.logical_and(gout>=median-std,gout<=median+std)
-	valid=gout[np.where(cond)]
-	m2,std=np.mean(valid),np.std(valid)
-	for i in range(len(gin)):
-		if gout[i]<m2-std or gout[i]>m2+std:
-			gout[i]=m2
-		else:
-			break
-	gin=np.full(gin.shape,np.mean(gin))
-	gout=np.full(gout.shape,np.mean(gout))
-	return gin,gout
+import os
+o_path = os.getcwd()
+sys.path.append(o_path)
+import library.util as util
 
 dag_send={}
 dag_recv={}
@@ -68,7 +53,7 @@ if False:
 	plt.ylabel('gap value(us)')
 	plt.savefig('user-dag-diff.png',bbox_inches='tight')
 else:
-	smooth_gin,smooth_gout=smooth(user_gin[rate][:99],user_gout[rate][:99])
+	smooth_gin,smooth_gout=util.smooth(user_gin[rate][:99],user_gout[rate][:99])
 	plt.subplot(1,2,1)
 	plt.scatter(x,dag_gin[rate][:99],s=1,label='dag gin')
 	plt.scatter(x,smooth_gin,s=1,label='smooth gin')

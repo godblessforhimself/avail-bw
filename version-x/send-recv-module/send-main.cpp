@@ -5,6 +5,7 @@
 #include "send-module.h"
 #include "util.h"
 int main(int argc, char *argv[]) {
+	tick();
 	parse_args(argc, argv);
 	// initialize tcp and udp socket
 	initialize();
@@ -17,4 +18,5 @@ int main(int argc, char *argv[]) {
 	// begin to send inspect packets
 	send_inspect();
 	clean();
+	tock();
 }
