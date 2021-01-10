@@ -1,0 +1,5 @@
+spruce_snd
+spruce_rcv
+*.o
+*~
+

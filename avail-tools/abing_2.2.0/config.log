@@ -1,0 +1,25 @@
+This file contains any messages produced by compilers while
+running configure, to aid debugging if configure makes a mistake.
+
+configure:529: checking for gcc
+configure:642: checking whether the C compiler (gcc  ) works
+configure:658: gcc -o conftest    conftest.c  1>&5
+configure:684: checking whether the C compiler (gcc  ) is a cross-compiler
+configure:689: checking whether we are using GNU C
+configure:717: checking whether gcc accepts -g
+configure:781: checking host system type
+configure:803: checking how to run the C preprocessor
+configure:886: checking for sched.h
+configure:886: checking for sys/mman.h
+configure:924: checking for sqrt in -lm
+configure:971: checking for gethostbyname in -lnsl
+configure:1018: checking for socket in -lsocket
+configure:1065: checking for socket in -lxnet
+configure:1112: checking for sched_setscheduler in -lposix4
+configure:1167: gcc -c -g -O4 -Wall  conftest.c 1>&5
+configure: In function `main':
+configure:1163: warning: unused variable `x'
+configure:1186: gcc -c -g -O4 -Wall  conftest.c 1>&5
+configure: In function `main':
+configure:1182: warning: implicit declaration of function `foo'
+configure:1554: checking cached information

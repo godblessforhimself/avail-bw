@@ -1,0 +1,28 @@
+Readme for Spruce version 0.3
+
+Compiling:
+
+gmake OR make
+
+To run:
+
+first start spruce_rcv at the destination, and then start spruce_snd at the
+source as follows
+
+destination$ ./spruce_rcv
+source$ ./spruce_snd -h destination -c 100M
+
+options:
+
+ -h destination host where spruce_rcv is running
+
+ -c Path capacity
+  Path capacity may be specified as either 
+   bits per second (no suffix)
+   kilobits per second (suffix of K)
+   megabits per second (suffix of M)
+
+ -n number of pairs to send (default is 100)
+
+Please send any comments/questions to
+jastr@mit.edu

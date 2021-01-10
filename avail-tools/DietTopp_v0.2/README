@@ -1,0 +1,24 @@
+2004-10-25
+	DietTopp is a tool that estimates the end-to-end link capacity as
+	well as the end-to-end available bandwidth. To get accurate results
+	the path should not contain more than one bottleneck (i.e. more
+	than one link that will be congested when DietTopp is measuring).
+
+	Follow the steps below to install and run DietTopp
+	1) run ./configure in the DietTopp/configure_dir/ directory
+	2) run make in the DietTopp/ directory
+	3) "server" and "measure" are the two executables created, run 
+	   "server" on the receiving machine and "measure" on the sending
+	   machine
+
+	More information can be obtained from 
+	http://www.idt.mdh.se/~ajn12/
+
+	Questions and bug reports can be posted to
+	andreas.johnsson(at)mdh.se
+
+
+
+	Copyright (c) 2004, Andreas Johnsson and Bob Melander
+
+

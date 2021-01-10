@@ -14,3 +14,7 @@ nohup.out
 data
 version-x/send-recv-module/build
 temp
+*.tar.gz
+*.tgz
+*.tar
+images

@@ -1,0 +1,1 @@
+rsync -avz -e 'ssh -p 3970' --exclude "*.erf" --exclude "*.pcap" --exclude "*.tmp" amax@aliyun.ylxdzsw.com:/home/amax/jintao_test/avail-tools/data . 1>/dev/null
