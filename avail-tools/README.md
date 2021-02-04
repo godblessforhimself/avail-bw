@@ -31,16 +31,7 @@ spruce
 didn't work well without -i option
 
 
-#### PLAN
-ASSOLO<->pathload<->IGI/PTR<->spruce
-
-prediction of
-Accuracy:
-pathload=IGI/PTR>ASSOLO>spruce
-
-Measurement cost:
-pathload=IGI/PTR
->>>
-ASSOLO=spruce
-
-0,50,900 100
+#### sync all code to remote sender and receiver
+bash deploy-scripts/quick-deploy.sh
+#### fetch bqr data to data/bqr
+bash fetch-scripts/fetch-bqr.sh

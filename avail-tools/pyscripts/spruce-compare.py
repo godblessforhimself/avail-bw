@@ -96,6 +96,36 @@ def drawBothError(real,meas,gt):
 	plt.legend()
 	plt.savefig('images/spruce-real.png',bbox_inches='tight')
 
+def drawAllError(real,meas,spruce,gt):
+	e1=np.array(real)
+	e2=np.array(meas)
+	e3=np.array(spruce)
+	gt_=gt.reshape(-1,1)
+	error1=e1-gt_
+	error2=e2-gt_
+	error3=e3-gt_
+	fig,ax=plt.subplots(figsize=(10,10))
+	m,l,h=meanConfidenceInterval(error1)
+	eb=ax.errorbar(rates,m,(m-l,h-m),capsize=3,fmt='.-b',label='real')
+	eb[-1][0].set_linestyle('dotted')
+	m,l,h=meanConfidenceInterval(error2)
+	eb=ax.errorbar(rates,m,(m-l,h-m),capsize=3,fmt='^-r',label='new')
+	eb[-1][0].set_linestyle('dotted')
+	m,l,h=meanConfidenceInterval(error3)
+	eb=ax.errorbar(rates,m,(m-l,h-m),capsize=3,fmt='o-g',label='origin')
+	eb[-1][0].set_linestyle('dotted')
+	plt.title('error comparison')
+	plt.xlabel('traffic rate(Mbps)')
+	plt.ylabel('error(Mbps)')
+	plt.text(.40,.94,'95% CI errorbar(n:{})'.format(error1.shape[1]),transform=ax.transAxes)
+	plt.xlim(rates[0]-5,rates[-1]+5)
+	plt.xticks(rates)
+	plt.ylim(-360,240+1)
+	plt.yticks(np.arange(-360,240+1,40))
+	plt.grid()
+	plt.legend()
+	plt.savefig('images/spruce-only.png',bbox_inches='tight')
+
 def meanConfidenceInterval(data_, confidence=0.95):
 	# nrate,nsample
 	data=np.array(data_)
@@ -179,6 +209,7 @@ if __name__=='__main__':
 	gt=gt[::realStep//minStep]
 	realEstimation=[]
 	measEstimation=[]
+	spruceEstimation=[]
 	realDuration=[]
 	realGapDuration=[]
 	measDuration=[]
@@ -189,6 +220,8 @@ if __name__=='__main__':
 	for rate in rates:
 		realAs=[]
 		measAs=[]
+		spruceAs=np.loadtxt('{}/{}.txt'.format(prefix,rate))
+		spruceEstimation.append(spruceAs)
 		rds=[]
 		rgds=[]
 		mds=[]
@@ -223,6 +256,7 @@ if __name__=='__main__':
 		realGaps.append(realGap_)
 		measGaps.append(measGap_)
 	# awful code ends
+	drawAllError(realEstimation,measEstimation,spruceEstimation,gt)
 	#drawBothError(realEstimation,measEstimation,gt)
 	#drawDuration(realDuration,measDuration)
 	#drawGapSum(realGapDuration,measGapDuration)

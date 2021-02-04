@@ -1,0 +1,1 @@
+rsync -avz -e "ssh -p 18743" ubuntu5@39.108.129.28:/home/ubuntu5/abw-project/avail-tools/bqr/send-recv-module/build/*.txt data/bqr/ 1>/dev/null

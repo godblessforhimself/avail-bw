@@ -178,13 +178,20 @@ if __name__=='__main__':
 	if inspect_number<0:
 		logFile.write('load number {}, inspect number {} < 0\n'.format(load_number,inspect_number))
 		safe_exit(-1)
+	# denoising
 	send,recv=util.smooth(send,recv,load_number)
 	send,recv,owd=util.remove_offset(send,recv)
 	owd_min=np.min(owd)
 	inspect_rate=get_rate(send[-1]-send[load_number],(inspect_number-1)*inspect_size)
 	inspect_owd=owd[load_number:]
+	# if load owd is increasing, vin>vout>A, upperBound=vout
+	# if load owd does not change, vin<A, lowerBound=vin
 	lowerBoundary,upperBoundary=initialBoundary(send,recv,owd,load_number,packet_size)
+	# if inspect owd is increasing, vinspect>A, upperBound=vinspect
+	# if inspect owd is decreasing and not recovered, upperBound=(A for recovered at the end)
+	# if inspect owd is decreasing to recovered, lowerBound=(A for longer recovered time), upperBound=(A for shorter recovered time).
 	E,L,U=estimate_abw(inspect_owd,inspect_rate,owd_min,load_number,packet_size,inspect_size,send)
+	# merge boundary
 	L=max(lowerBoundary,L)
 	if upperBoundary!=-1 and U!=-1:
 		U=min(upperBoundary,U)

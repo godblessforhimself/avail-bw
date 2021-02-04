@@ -1,0 +1,2 @@
+ssh -p ${1} ${2}@39.108.129.28 "mkdir -p /home/${2}/abw-project/avail-tools"
+rsync -avz -e "ssh -p ${1}" --exclude "data/" assolo-0.9a bqr igi-ptr-2.1 pathload_1.3.2 spruce-origin ${2}@39.108.129.28:/home/${2}/abw-project/avail-tools 1>/dev/null

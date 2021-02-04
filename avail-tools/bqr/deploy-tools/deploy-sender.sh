@@ -1,0 +1,1 @@
+rsync -avz -e 'ssh -p 18739' --exclude="data/" ../bqr ubuntu1@39.108.129.28:/home/ubuntu1/avail-tools >/dev/null

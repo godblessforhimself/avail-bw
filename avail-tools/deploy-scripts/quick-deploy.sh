@@ -1,2 +1,3 @@
-bash deploy-scripts/copy2dag.sh
-ssh -p 3970 amax@aliyun.ylxdzsw.com "cd ~/jintao_test/avail-tools; bash deploy-scripts/dag2sender.sh; bash deploy-scripts/dag2receiver.sh" 1>/dev/null
+bash deploy-scripts/deploy-base.sh 18739 ubuntu1
+bash deploy-scripts/deploy-base.sh 18743 ubuntu5
+bash deploy-scripts/deploy-dag.sh

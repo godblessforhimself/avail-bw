@@ -1,0 +1,1 @@
+rsync -avz -e "ssh -p 18739" --exclude "*.gz" --exclude "*.tgz" --exclude "*.tar" --exclude "data/" ../avail-tools ubuntu1@39.108.129.28:/home/ubuntu1/abw-project >/dev/null
