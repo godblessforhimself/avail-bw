@@ -104,3 +104,11 @@ https://support.huawei.com/hedex/hdx.do?docid=EDOC1100126532&tocURL=resources/dc
 sw1 的 XGigabitEthernet0/0/1 是3.1
 sw2 的 XGigabitEthernet0/0/1 是3.2
 光口电口不混用
+
+在用户视图执行save命令
+10.0.0.0/16 都是1Gbps的主IP
+10.1.0.0/16 都是10Gbps的从IP
+一个端口配置两个IP 
+ip address xxx.xxx.xxx.xxx xx sub
+
+node 2 ping 10.0.7.1

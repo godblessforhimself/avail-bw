@@ -45,7 +45,7 @@ struct timestampPacket {
 };
 struct signalPacket{
 	int signal;
-	double duration;
+	double param;
 	void host2network();
 	void network2host();
 };

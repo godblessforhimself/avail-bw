@@ -17,9 +17,9 @@ socklen_t sockLen = 0;
 sockaddr_in destAddress, srcAddress;
 string timestampFilename("timestamp.txt"), resultFilename("result.txt"), logFilename("log.txt");
 FILE *timeFile, *resultFile, *logFile;
-int recvFlag = 0, busyPoll = 0;
+int recvFlag = 0, busyPoll = 0, runOnce = 0;
 signalPacket sigPkt;
-double suggestDuration = 0, duration, sendDuration, inspectDuration, inspectGap, loadInspectGap;
+double inspectGap, loadInspectGap;
 double beginTimeDouble, currentTimeDouble, tmpDouble;
 double *pool, *phin, *phout, *tin, *tout, *gin, *gout, *owd;
 double owdMin, owdMax, owdEnd;
@@ -60,6 +60,9 @@ void innerMain(int argc, char *argv[]){
 		mainReceive();
 		/* close some socket and files */
 		clean();
+		printf("End of connection\n");
+		if (runOnce == 1) 
+			break;
 	}
 	safeExit(0);
 }
@@ -95,41 +98,46 @@ void closeSocket(){
 	close(connFd);
 	close(udpFd);
 }
+static struct option longOptions[] = {
+	{"port",      required_argument, 0,  1},
+	{"timestamp", required_argument, 0,  2},
+	{"result",    required_argument, 0,  3},
+	{"log",       required_argument, 0,  4},
+	{"polling",   required_argument, 0,  5},
+	{"busy-poll", required_argument, 0,  6},
+	{"once",            no_argument, 0,  7},
+	{0,           0,                 0,  0}
+};
 void parseParameter(int argc, char *argv[]) {
-	static struct option longOptions[] = {
-		{"port",      required_argument, 0,  0 },
-		{"timestamp", required_argument, 0,  0 },
-		{"result",    required_argument, 0,  0 },
-		{"log",       required_argument, 0,  0 },
-		{"polling",   required_argument, 0,  0 },
-		{"busy-poll", required_argument,0, 0 },
-		{0,         0,                 0,  0 }
-	};
-	#define ARG_EQUAL(x) (strncmp(ptr, (x), maxOptLength) == 0)
-	int optionIndex = 0, c, maxOptLength = 12;
-	const char *ptr;
+	int optionIndex = 0, c;
     while ((c = getopt_long(argc, argv, "", longOptions, &optionIndex)) != -1) {
-		ptr = longOptions[optionIndex].name;
         switch (c) {
-            case 0:
-				if (ARG_EQUAL("port")) {
-					listenPort = atoi(optarg);
-				} else if (ARG_EQUAL("timestamp")) {
-					timestampFilename = string(optarg);
-				} else if (ARG_EQUAL("result")) {
-					resultFilename = string(optarg);
-				} else if (ARG_EQUAL("log")) {
-					logFilename = string(optarg);
-				} else if (ARG_EQUAL("polling")) {
-					if (atoi(optarg) == 1) {
-						recvFlag |= MSG_DONTWAIT;
-					}
-				} else if (ARG_EQUAL("busy_poll")) {
-					busyPoll = atoi(optarg);
+			case 1:
+				listenPort = atoi(optarg);
+				break;
+			case 2:
+				timestampFilename = string(optarg);
+				break;
+			case 3:
+				resultFilename = string(optarg);
+				break;
+			case 4:
+				logFilename = string(optarg);
+				break;
+			case 5:
+				if (atoi(optarg) == 1) {
+					recvFlag |= MSG_DONTWAIT;
 				}
-                break;    
+				break;
+			case 6:
+				busyPoll = atoi(optarg);
+				break;
+			case 7:
+				runOnce = 1;
+				break;
 			default:
 				printf("getopt returned character code 0%o\n", c);
+				break;
         }
     }
 	printf("-------Parse Arg End-----------\n");
@@ -275,11 +283,6 @@ int getRecoverInfo(double &recoverDegree, int &recoverPos) {
 	}
 	return recovered;
 }
-void getDuration(){
-	duration = tin[trainPacket - 1] - tin[0];
-	sendDuration = tin[loadNumber - 1] - tin[0];
-	inspectDuration = tin[trainPacket - 1] - tin[loadNumber - 1];
-}
 double min(double a, double b) {
 	return a>b ? b : a;
 }
@@ -307,33 +310,7 @@ int getSuggestion() {
 		if vague recover trend, double duration
 		if centered, return satisfied = 1; else return 0;
 	*/
-	double recoverDegree;
-	int recoverPos, recoverFlag, satisfied = 0;
-	denoising();
-	updateOwd();
-	getDuration();
-	recoverFlag = getRecoverInfo(recoverDegree, recoverPos);
-	fprintf(logFile, "suggestion recoverFlag %d, recoverDegree %.2f\n", recoverFlag, recoverDegree);
-	if (recoverDegree <= 0.25) {
-		suggestDuration = min(sendDuration + inspectDuration * 2.0, DurationMax);
-	} else if (recoverFlag) {/* recovered */
-		double left, right, recoverTime;
-		left = 0.3 * inspectDuration;
-		right = 0.7 * inspectDuration;
-		recoverTime = tin[recoverPos] - tin[loadNumber];
-		if (recoverTime > left && recoverTime < right) {/* it is in the center */
-			suggestDuration = duration;
-			satisfied = 1;
-		} else if (recoverTime <= left) {
-			suggestDuration = sendDuration + inspectDuration / 2;
-		} else if (recoverTime >= right) {
-			suggestDuration = min(sendDuration + inspectDuration * 2, DurationMax);
-		}
-	} else { /* not recovered */
-		suggestDuration = min(sendDuration + inspectDuration / recoverDegree * 2, DurationMax);
-	}
-	fprintf(logFile, "suggestion satisfied=%d. duration %.2f->%.2f\n", satisfied, duration*1e6, suggestDuration*1e6);
-	return satisfied;
+	return 1;
 }
 void getPrediction(){
 	fprintf(logFile, "=============Predict Begins===========\n");
@@ -470,15 +447,15 @@ void mainReceive(){
 			satisfied = getSuggestion();
 			trainNumber++;
 			if (!satisfied && trainNumber < retryNumber) {
-				sigPkt = {ctrlSignal::nextTrain, suggestDuration * 1e6};
+				sigPkt = {ctrlSignal::nextTrain, 0};
 			} else {
 				getPrediction();
 				streamNumber++;
 				if (streamNumber < repeatNumber) {
 					trainNumber = 0;
-					sigPkt = {ctrlSignal::nextStream, suggestDuration * 1e6};
+					sigPkt = {ctrlSignal::nextStream, 0};
 				} else {
-					sigPkt = {ctrlSignal::end, suggestDuration * 1e6};
+					sigPkt = {ctrlSignal::end, 0};
 					exitFlag = 1;
 				}
 			}

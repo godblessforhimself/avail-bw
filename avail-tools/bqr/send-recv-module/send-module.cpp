@@ -1,4 +1,19 @@
 /*
+	preheat packet:
+	预热包，preheatNumber个，loadSize的包，间隔preheatGap微秒
+	preheat发送失败会重发
+
+
+	stream:
+	数量repeatNumber，间隔streamGap；每个stream包含最多retryNumber个train。train-train的间隔为trainGap。
+	train发送失败会重发
+	
+	train:
+	包含负载包和检查包。负载包数量loadNumber，大小loadSize，速率loadRate；检查包数量inspectNumber，大小inspectSize，与负载包间隔loadInspectGap，间隔inspectGap。
+
+	负载包数量下限、上限
+	检查包数量上限
+	
 */
 #include "send-module.h"
 #include "util.h"
@@ -6,7 +21,7 @@
 
 int tcpFd = -1, udpFd = -1, destPort = 11106, globalPacketId = 0, noUpdate = 0;
 int repeatNumber = 1, retryNumber = 5, loadNumber = 100, loadSize = 1472, inspectNumber = 0, inspectSize = 1472, inspectJumbo = 1, preheatNumber = 10;
-double loadRate = 0, duration = 0, streamGap = 10000, trainGap = 1000, preheatGap = 1000, inspectGap;
+double loadRate = 0, streamGap = 10000, trainGap = 1000, preheatGap = 1000, inspectGap = 200, loadInspectGap, jumboGap = 50;
 char destIPString[20] = "192.168.5.1";
 sockaddr_in srcAddress, destAddress;
 socklen_t sockLen = sizeof(sockaddr_in);
@@ -14,72 +29,88 @@ signalPacket sigPkt;
 timespec beginTime, currentTime, endTime, tempTime;
 double beginTimeDouble, currentTimeDouble, endTimeDouble, timeDouble, actualRate, tmpDouble;
 timestampPacket tpacketTemp;
-
+static struct option longOptions[] = {
+	{"loadRate",   required_argument, 0, 1},
+	{"loadSize",    required_argument, 0,  2},
+	{"inspectSize",    required_argument, 0,  3},
+	{"loadNumber",  required_argument, 0,  4},
+	{"inspectNumber",    required_argument, 0,  5},
+	{"inspectJumbo",    required_argument, 0,  6},
+	{"repeatNumber",    required_argument, 0,  7},
+	{"retryNumber",    required_argument, 0,  8},
+	{"preheatNumber",    required_argument, 0,  9},
+	{"inspectGap",    required_argument, 0,  10},
+	{"loadInspectGap",    required_argument, 0,  11},
+	{"streamGap",    required_argument, 0,  12},
+	{"trainGap",    required_argument, 0,  13},
+	{"preheatGap",    required_argument, 0,  14},
+	{"port",    required_argument, 0,  15},
+	{"dest",    required_argument, 0,  16},
+	{"noUpdate",required_argument, 0,  17},
+	{"jumboGap",required_argument, 0,  18},
+	{0,         0,                 0,  0}
+};
 int parseArgs(int argc, char *argv[]) {
-	static struct option longOptions[] = {
-		{"loadRate",   required_argument, 0,  0 },
-		{"loadSize",    required_argument, 0,  0 },
-		{"inspectSize",    required_argument, 0,  0 },
-		{"loadNumber",  required_argument, 0,  0 },
-		{"inspectNumber",    required_argument, 0,  0 },
-		{"inspectJumbo",    required_argument, 0,  0 },
-		{"repeatNumber",    required_argument, 0,  0 },
-		{"retryNumber",    required_argument, 0,  0 },
-		{"preheatNumber",    required_argument, 0,  0 },
-		{"duration",    required_argument, 0,  0 },
-		{"streamGap",    required_argument, 0,  0 },
-		{"trainGap",    required_argument, 0,  0 },
-		{"preheatGap",    required_argument, 0,  0 },
-		{"port",    required_argument, 0,  0 },
-		{"dest",    required_argument, 0,  0 },
-		{"noUpdate",required_argument, 0,  0 },
-		{0,         0,                 0,  0 }
-	};
-	#define ARG_EQUAL(x) (strncmp(longOptions[optionIndex].name, (x), maxOptLength) == 0)
-	int optionIndex = 0, c, maxOptLength = 10;
+	int optionIndex = 0, c;
     while ((c = getopt_long(argc, argv, "", longOptions, &optionIndex)) != -1) {
         switch (c) {
-            case 0:
-				if (ARG_EQUAL("loadRate")) {
-					if (strncmp(optarg, "auto", 4) == 0) {
-						loadRate = 0.0;
-					} else {
-						loadRate = atof(optarg);
-					}
-				} else if (ARG_EQUAL("loadSize")) {
-					loadSize = atoi(optarg);
-				} else if (ARG_EQUAL("inspectSize")) {
-					inspectSize = atoi(optarg);
-				} else if (ARG_EQUAL("loadNumber")) {
-					loadNumber = atoi(optarg);
-				} else if (ARG_EQUAL("inspectNumber")) {
-					inspectNumber = atoi(optarg);
-				} else if (ARG_EQUAL("inspectJumbo")) {
-					inspectJumbo = atoi(optarg);
-				} else if (ARG_EQUAL("repeatNumber")) {
-					repeatNumber = atoi(optarg);
-				} else if (ARG_EQUAL("retryNumber")) {
-					retryNumber = atoi(optarg);
-				} else if (ARG_EQUAL("preheatNumber")) {
-					preheatNumber = atoi(optarg);
-				} else if (ARG_EQUAL("duration")) {
-					duration = atof(optarg);
-				} else if (ARG_EQUAL("streamGap")) {
-					streamGap = atof(optarg);
-				} else if (ARG_EQUAL("trainGap")) {
-					trainGap = atof(optarg);
-				} else if (ARG_EQUAL("preheatGap")) {
-					preheatGap = atof(optarg);
-				} else if (ARG_EQUAL("dest")) {
-					strncpy(destIPString, optarg, sizeof(destIPString));
-				} else if (ARG_EQUAL("port")) {
-					destPort = atoi(optarg);
-				} else if (ARG_EQUAL("noUpdate")) {
-					noUpdate = atoi(optarg);
-				}
-                break;
+            case 1:
+				loadRate = atof(optarg);
+				break;
+			case 2:
+				loadSize = atoi(optarg);
+				break;
+			case 3:
+				inspectSize = atoi(optarg);
+				break;
+			case 4:
+				loadNumber = atoi(optarg);
+				break;
+			case 5:
+				inspectNumber = atoi(optarg);
+				break;
+			case 6:
+				inspectJumbo = atoi(optarg);
+				break;
+			case 7:
+				repeatNumber = atoi(optarg);
+				break;
+			case 8:
+				retryNumber = atoi(optarg);
+				break;
+			case 9:
+				preheatNumber = atoi(optarg);
+				break;
+			case 10:
+				inspectGap = atof(optarg);
+				break;
+			case 11:
+				loadInspectGap = atof(optarg);
+				break;
+			case 12:
+				streamGap = atof(optarg);
+				break;
+			case 13:
+				trainGap = atof(optarg);
+				break;
+			case 14:
+				preheatGap = atof(optarg);
+				break;
+			case 15:
+				destPort = atoi(optarg);
+				break;
+			case 16:
+				strncpy(destIPString, optarg, sizeof(destIPString));
+				break;
+			case 17:
+				noUpdate = atoi(optarg);
+				break;
+			case 18:
+				jumboGap = atoi(optarg);
+				break;
 			default:
 				printf("getopt returned character code 0%o\n", c);
+				break;
         }
     }
 	int minSize=(int)sizeof(timestampPacket);
@@ -193,31 +224,36 @@ void sendLoad(){
 	endTimeDouble = currentTimeDouble;
 }
 void sendInspect(){
-	/* (inspectNumber*inspectJumbo,inspectSize) packet evenly spaced between (END,duration+BEGIN) */
-	/* while END>=BEGIN+duration, increase duration */
+	/* 
+		inspectNumber*inspectJumbo
+		如果inspectJumbo=1，包间隔为inspectGap
+		如果inspectJumbo>1，inspectGap需要大于jumboGap*inspectJumbo
+	*/
 	if (inspectNumber <= 0) {
 		return;
 	}
-	while (endTimeDouble >= duration * 1e-6 + beginTimeDouble) {
-		duration = 2 * duration;
+	tmpDouble = inspectGap * 1e-6 - (inspectJumbo - 1) * jumboGap * 1e-6;
+	if (tmpDouble < 0) {
+		printf("inspect gap %.0f us, jumboGap %.0f us, jumboNum %d\n", inspectGap, jumboGap, inspectJumbo);
+		return;
 	}
-	/* mean gap */
-	tmpDouble = (duration * 1e-6 + beginTimeDouble - endTimeDouble) / inspectNumber;
-	int i = 0, j = 0;
-	timeDouble = endTimeDouble + tmpDouble;
+	int i = 0;
+	timeDouble = endTimeDouble + (loadInspectGap - (inspectJumbo - 1) * jumboGap) * 1e-6;
 	while (1) {
-		if (i >= inspectNumber) {
+		if (i >= inspectNumber * inspectJumbo) {
 			break;
 		}
 		clock_gettime(clockToUse, &currentTime);
 		currentTimeDouble = timespec2double(currentTime);
 		if (currentTimeDouble >= timeDouble) {
-			for (j = 0; j < inspectJumbo; j++) {
-				setTimestampPacket(globalPacketId++, currentTimeDouble, 0);
-				send(udpFd, udpBuffer, inspectSize, 0);
-			}
-			timeDouble += tmpDouble;
+			setTimestampPacket(globalPacketId++, currentTimeDouble, 0);
+			send(udpFd, udpBuffer, inspectSize, 0);
 			i++;
+			if (i % inspectJumbo == 0) {
+				timeDouble += inspectGap * 1e-6;
+			} else {
+				timeDouble += tmpDouble;
+			}
 		}
 	}
 }
@@ -265,21 +301,17 @@ void mainSend(){
 			;
 		} else if (signal == ctrlSignal::nextTrain) {
 			if (noUpdate == 0) {
-				printf("update duration %.0f -> %.0f\n", duration, sigPkt.duration);
-				duration = sigPkt.duration;
+				printf("param %.0f\n", sigPkt.param);
 			}
 			smartSleep(trainGap);
 		} else if (signal == ctrlSignal::nextStream) {
 			if (noUpdate == 0) {
-				printf("update duration %.0f -> %.0f\n", duration, sigPkt.duration);
-				duration = sigPkt.duration;
+				printf("param %.0f\n", sigPkt.param);
 			}
 			smartSleep(streamGap);
 		} else if (signal == ctrlSignal::retransmit) {
 			smartSleep(trainGap);
 		} else if (signal == ctrlSignal::end) {
-			break;
-		} else {
 			break;
 		}
 		sendLoad();
