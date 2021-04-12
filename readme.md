@@ -1,5 +1,285 @@
-#### bqr 算法
+http://www.spin.rice.edu/Software/poisson_gen/
+10Gbps的实验
 
+rsync -avz amax@192.168.67.84:/home/amax/guohaorui/throughput_plot/equinix-nyc.dirA.20180816-125910.UTC.anon.pcap /home/tony/pcapFiles
+rsync -avz /home/tony/pcapFiles/equinix-nyc.dirA.20180816-125910.UTC.anon.pcap ubuntu2@192.168.66.17:/home/ubuntu2/pcapFiles
+
+去除ipv6 icmp6
+tcpdump -r /home/tony/pcapFiles/equinix-nyc.dirA.20180816-125910.UTC.anon.pcap -nN -w /home/tony/pcapFiles/ip4.pcap "not ip6 and not icmp6"
+修改ether和IP
+time sudo tcprewrite --dlt=enet --srcipmap=0.0.0.0/0:10.0.1.1/32 --dstipmap=0.0.0.0/0:10.0.7.1/32 --enet-smac=a4:fa:76:01:43:f8 --enet-dmac=60:12:3c:3f:bc:d3 --infile=/home/tony/pcapFiles/ip4.pcap --outfile=/home/tony/pcapFiles/ip4-address.pcap
+填补空白
+./main /home/tony/pcapFiles/ip4-address.pcap /home/tony/pcapFiles/ip4-full.pcap
+统计长度
+tshark -r /home/tony/pcapFiles/ip4-full.pcap -T fields -e frame.time_epoch -e frame.len > ip4.len
+发到node2
+rsync -avz /home/tony/pcapFiles/ip4-full.pcap ubuntu2@192.168.66.17:/home/ubuntu2/pcapFiles
+播放
+sudo tcpreplay-edit --intf1 ens1f1 --fixcsum --duration=1 /home/ubuntu2/pcapFiles/ip4-full.pcap
+
+time sudo tcpreplay-edit --srcipmap=0.0.0.0/0:10.1.2.1/32 --dstipmap=0.0.0.0/0:10.1.7.1/32 --enet-smac=a4:fa:76:01:43:f8 --enet-dmac=60:12:3c:3f:bc:d3 --fixlen=pad --fixcsum --intf1 ens1f0 --stats=2 -x 10 --netmap /home/ubuntu2/pcapFiles/equinix-nyc.dirA.20180816-125910.UTC.anon.pcap
+
+time sudo tcpreplay-edit --srcipmap=0.0.0.0/0:10.0.2.1/32 --dstipmap=0.0.0.0/0:10.0.7.1/32 --enet-smac=a4:fa:76:01:43:f8 --enet-dmac=60:12:3c:3f:bc:d3 --fixlen=pad --fixcsum --intf1 ens1f0 --stats=1 --duration=10 --netmap bigFlows.pcap
+
+time sudo tcpreplay-edit --srcipmap=0.0.0.0/0:10.0.2.1/32 --dstipmap=0.0.0.0/0:10.0.7.1/32 --enet-smac=a4:fa:76:01:43:f8 --enet-dmac=60:12:3c:3f:bc:d3 -x 100 --fixcsum --intf1 ens1f0 --stats=1 --netmap bigFlows.pcap
+
+rsync -avz /home/tony/Downloads/ixgbe-5.3.8.tar.gz ubuntu2@192.168.66.17:/home/ubuntu2/netmap/LINUX/ext-drivers
+
+tcpreplay -i ens1f0 --netmap bigFlows.pcap
+
+tcprewrite --dlt=enet -i /home/ubuntu2/pcapFiles/ip4.pcap -o /home/ubuntu2/pcapFiles/1.pcap --srcipmap=0.0.0.0/0:10.0.2.1/32 --dstipmap=0.0.0.0/0:10.0.7.1/32 --enet-smac=a4:fa:76:01:43:f8 --enet-dmac=60:12:3c:3f:bc:d3 --fixlen=pad --fixcsum --mtu-trunc
+目标文件包长度最小=50B=46B+4B，最大=1504B=1500B+4B，先去除IPv6和ICMP6包，再将其大小-4B。
+使用tcprewrite进行转换
+1.
+tcpdump -r /home/tony/pcapFiles/equinix-nyc.dirA.20180816-125910.UTC.anon.pcap -nN -w /home/tony/pcapFiles/ip4.pcap "not ip6 and not icmp6"
+2.
+time ./main /home/tony/pcapFiles/ip4.pcap /home/tony/pcapFiles/ip4-reduced.pcap 
+3.
+rsync -avz /home/tony/pcapFiles/ip4-reduced.pcap ubuntu2@192.168.66.17:/home/ubuntu2/pcapFiles/ip4-reduced.pcap
+4.
+tcprewrite --dlt=enet -i /home/ubuntu2/pcapFiles/ip4-reduced.pcap -o /home/ubuntu2/pcapFiles/1.pcap --srcipmap=0.0.0.0/0:10.0.2.1/32 --dstipmap=0.0.0.0/0:10.0.7.1/32 --enet-smac=a4:fa:76:01:43:f8 --enet-dmac=60:12:3c:3f:bc:d3 --fixlen=pad --fixcsum
+5. 
+sudo tcpreplay -i ens1f0 -t 1.pcap --stats=3
+
+
+#### bigFlows.pcap
+total 1656538
+udp 320715
+tcp 1330920
+icmp 10540
+1655978
+TCP和UDP的重复包
+
+#### 优点 contribution
+测量快。结果即测量期间的平均可用带宽。
+测量准。对均匀流量特别准。对突发性、包大小接近实际的流量也尚可。
+通用于多跳。在背景流量为单跳时可以通用。
+
+#### 缺点
+缺乏TCP拥塞控制的反馈机制，不能持续性测量。
+需要以大于可用带宽的速率探测。
+测量期间增加了包的等待时间。
+测量多跳的流量效果如何。
+
+#### 结论
+对于均匀流量且包大小均最大的情况，目前的BQR效果良好
+对于非均匀的现实中流量，BQR在启动时，队列中可能有缓冲包，在BQR检查到队列恢复后，也会有背景流量到来，但不会计入BQR的结果。
+总体上，BQR多次有效测量平均值可反映平均流量。
+就单次测量而言，BQR普遍偏小。
+#### 测量
+每隔100ms进行一次测量
+共60秒/0.1秒=600次测量
+流量为node2->node3
+Link4设10Gbps使用DAG抓包
+node6启动DAG
+node2启动流量
+node1启动BQR
+清理、node6解析erf
+#### 实际场景中的流量
+caida流量无负载部分，且包含IPv6数据包
+为了模拟实际场景流量，可以使用bigFlows.pcap、tcpreplay加速播放
+duration: 300s
+9.4Mbps
+假如一轮测量总共300s，分为10轮，每轮持续30s
+速率区间为100-900Mbps，对应倍率为10-100
+sudo dagsnap -d0 -s 60 -o /tmp/dag/dagsnap.erf 1>/tmp/dag/dagsnap.log 2>&1 &
+ssh ubuntu1@192.168.66.16 "nohup bash /home/ubuntu1/pcapFiles/send.sh 1>/tmp/pcap/send.log 2>&1 &"
+send.sh:
+time sudo tcpreplay-edit --srcipmap=0.0.0.0/0:10.0.1.1/32 --dstipmap=0.0.0.0/0:10.0.7.1/32 --enet-smac=a4:fa:76:06:1d:32 --enet-dmac=60:12:3c:3f:bc:d5 --fixcsum --intf1 ens1f1 --loop=10 --stats=1 -x 100 --duration=30 /home/ubuntu1/pcapFiles/bigFlows.pcap
+time sudo tcpreplay-edit --srcipmap=0.0.0.0/0:10.0.1.1/32 --dstipmap=0.0.0.0/0:10.0.7.1/32 --enet-smac=a4:fa:76:06:1d:32 --enet-dmac=60:12:3c:3f:bc:d5 --fixcsum --intf1 ens1f1 --loop=1 --stats=1 -x 10 --duration=30 /home/ubuntu1/pcapFiles/bigFlows.pcap
+sudo dagconvert -T erf:pcap -i /tmp/dag/dagsnap.erf -f a -o a.pcap
+sudo dagconvert -T erf:pcap -i /tmp/dag/dagsnap.erf -f c -o c.pcap
+sudo tcpdump -nN -r /tmp/dag/a.pcap > /tmp/dag/a.txt
+tshark -r a.pcap -T fields -e frame.time_epoch -e frame.len > a.len
+
+查看link-layer header type: sudo tcpdump -i ens1f1 -L [EN10MB]
+link-layer header type是Raw IP,解决办法见https://github.com/appneta/tcpreplay/issues/153,另一个相关https://tcpreplay-users.narkive.com/tdgBdOmE/help-regarding-sending-raw-ip-pcap-file-to-ethernet
+--dlt=enet
+node1使用tcpreplay发包
+DAG进行抓包，然后分析包内容，进行对比
+tshark -r .pcap -c 100 -Y "frame.len==243"
+#### BQR曲线对比
+实验1
+900-900-900
+500-500-500
+0-0-0
+900-400-400
+400-900-400
+400-400-900
+实验2
+600-0-0
+600-300-0
+0-600-0
+300-600-0
+实验3
+900-0(100)-0
+0-0(100)-900
+#### 实验结论
+实验1：误差、包开销、时间
+实验2：spruce的测量结果随着非紧链路带宽变化而变化；PTR有突然变化；其他方法无明显变化
+因为实验2 0-600-0和600-0-0运行了两次，需要使用exp2/patch2.sh重复。注意实验拓扑。
+实验3：补充exp3/patch1.sh
+第二跳为窄链路，
+
+迭代次数：
+有效时间
+实际时间
+平均队列长度
+最大队列长度
+#### numpy
+reduce使用op消去一个轴
+reduceat使用op消去轴的区间
+广播原则：两者的最后一个维度(trailing dimension)长度相同或为1,则是兼容的
+在a[:,np.newaxis,:]可以引入维度
+#### bash脚本注意
+编写循环时不要使用i，父脚本和子脚本的i冲突时会发生错误！
+#### BQR改进
+使用10点+90点存在缺点：10、11的可用带宽差距大；第9、10个点单向延迟偏大，导致原本在第9个点的可用带宽估计变为第11个点的估计，比实际值远小，且很难从局部脱离出来。
+改进为使用60点+40点。
+#### 实验设计
+2证明spruce的缺陷，在34中不测量spruce。
+1 三跳的实验
+13组 无中断延迟
+cx=cy=cz=1Gbps
+x=y=z=range(0,900,100)
+x=900,y=z=400
+x=z=400,y=900
+x=y=400,z=900
+
+2 ADR和spruce真实效果
+修改Link4为XGigabytes
+cx=cy=1Gbps,cz=10Gbps，启用DAG，注意记录spruce接收处的时间
+x=600 y=range(0,500,100) z=0
+x=range(0,500,100) y=600 z=0
+
+3 紧链路非窄链路
+修改Link3 speed为100Mbps
+cx=cz=1Gbps,cy=100Mbps
+x=900,y=0,z=0
+x=900,y=0,z=400
+x=900,y=0,z=900
+x=900,y=20,z=900
+x=0,y=0,z=900
+x=400,y=0,z=900
+x=400,y=20,z=900
+900,0,0              紧链路在窄链路前
+900,0,400            紧链路在窄链路前，干扰1
+900,0,900            紧链路在窄链路前，干扰2
+900,20,900           紧链路在窄链路前，干扰3
+0,0,900              紧链路在窄链路后
+400,0,900            紧链路在窄链路后，干扰1
+400,20,900           紧链路在窄链路后，干扰2
+
+4 中断延迟=0,1,2,5,10,20,50,100,200,300
+
+#### 待解决问题
+dagconvert转换后没有包
+spruce 效果很差，使用两跳+DAG来进行实验
+#### 跳过D-ITG
+缩短脚本运行时间
+减少ssh的次数->ssh用于控制iperf3设置背景流量、控制中断延迟参数、发包工具->相同背景流量和中断延迟下测量不同工具多次
+->能持续多次的进程重复利用
+
+各个方法的函数 与 背景流量（链路带宽）、中断延迟的实验分开
+
+BQR调试信息
+预测值异常->使用对应train的时间戳人工预测->人工预测正常
+->方法出错->log中对应的信息
+
+#### ground-truth 如何获取
+Iperf3在长期的平均速率是稳定的趋近理想值。
+D-ITG长期的平均速率是不稳定的，它与系统实现select的方式有关，且恒定偏小。
+当使用D-ITG作为发包工具时，可用带宽的ground-truth改如何获取？
+
+#### D-ITG代码不易维护，测量结果表示
+arg是pps
+包间距为1/pps 秒 = 1000/pps 毫秒
+IntArriv=1000/arg
+wait = IntArriv.next()
+sec=(wait-1)/1000
+usec = (wait-1)*1000 % 1e6
+select(timeout)
+因为clock_nanosleep返回的时间比实际的时间长，select也有类似的问题，
+即包间隔会偏大，pps和包速率会偏小。D-ITG应当根据首个包开始的时间计算理论发包时间，来设置发送等待时间，这样总体的平均速率是很稳定的。
+http://traffic.comics.unina.it/software/ITG/download.php
+make
+sudo make install PREFIX=/usr/local
+
+我们只需要D-ITG发出constant、exponential、pareto三种分布的流量
+ITGSend的IDT参数：
+-C <rate> 以rate速率发送constant流量，单位是pps
+-E <mean_rate> 以rate的平均速率发送指数分布的流量，单位是pps
+-V <shape> <scale> pareto分布 shape=1.5 pdf=\frac{\alpha x_m^{\alpha}}{x^{\alpha+1}}
+x_m scale \alpha shape
+均值为\frac{\alpha x_m}{\alpha-1}
+\alpha=1.5时，均值为3*x_m
+
+500Mbps=42459pps
+ITGRecv
+constant：
+ITGSend -poll -a 10.0.7.1 -C 42459 -c 1472 -t 1000 -x /tmp/ditg/rx-constant.log
+exponential：
+ITGSend -poll -a 10.0.7.1 -E 42459 -c 1472 -t 1000 -x /tmp/ditg/rx-exponential.log
+pareto：（第二个参数scale的单位是毫秒）
+ITGSend -poll -a 10.0.7.1 -V 1.5 7.85e-3 -c 1472 -t 1000 -x /tmp/ditg/rx-pareto.log
+
+查看log文件
+ITGDec [filename]
+#### IGI/PTR
+make
+./ptr-server
+./ptr-client -n 60 -s 1472 -k 3 10.0.7.1
+#### spruce
+make
+./spruce_rcv
+./spruce_snd -h 10.0.7.1 -c 980M -n 100 -i 3000
+#### pathload
+./configure && make
+./pathload_snd -i
+./pathload_rcv -s 10.0.1.1 -t 30
+#### assolo
+./configure && make
+./assolo_snd
+./assolo_rcv
+./assolo_run -S 10.0.1.1 -R 10.0.7.1 -u 1500 -t 30 -J 6 -a 3 -p 1472
+mv \$(ls *.instbw) output.instbw
+
+#### 对比实验
+对象：BQR、Pathload、IGI/PTR、Spruce（实际、理论）、ASSOLO
+变量：背景流量的速率、中断延迟、背景流量的分布
+因变量/捕捉特征：测量时间（DAG）、流量开销（DAG）、精度（max-v或MRTG）
+脚本效率与ssh的数量有关，ssh多的脚本一定快不起来。
+
+#### 区间有限
+因为owd处于0.5x-1.5x区间
+它能测量的可用带宽为2mA-2n/3A
+m为负载包/负载包+0.5检查包
+n为负载包/负载包+检查包
+比如A=50Mbps,m=2/3,n=1/2, 测量范围为1.33A-0.33A=16.7Mbps-66.7Mbps
+实际可用带宽为950Mbps，则需要迭代很多次。
+
+改进检查包：记开始发送负载包的时间为t1，最后一个负载包的时间为t2，目标可用带宽为A，对应恢复时间为x，检查包间隔为G
+设最小检查包间隔为gmin，优化检查包的前10个包
+区间t2+g,x-40G的长度为L，若L>11G，则进行优化：
+在tleft,tright对应的A1,A2中间插入10个值，则第一个插值为10A1/11 + A2/11
+第一个插值对应的t为tx；
+如果tx-tleft>gmin，则将所有的插值作为实际时间；
+如果tx-tleft<=gmin，则令tx=tleft+gmin，然后令tleft=tx，进行相同的操作。
+
+#### 误差来源
+owd
+100 - 101 均为150以上
+102-200均为0-5
+但是最后10个的最大值为4,
+所以算法得到的位置是7
+
+后10个值太过集中，最大值小于实际值
+我们使用阈值f=10us，使得f+min作为恢复标准
+
+1-log stream 1, data[4]
+cond2 false
+
+#### bqr 算法
 检查包数量只有上限
 
 runWith(LN,G)
@@ -28,6 +308,8 @@ getLN_G(A,q)
 
 负载包数量影响x的大小（恢复时间）和探测开销；负载包越少，恢复时间越短，开销越小，因此负载包越少越好。但是同时G=qx会变小，单向延迟的最大改变量变小，如果它和噪声相当，就会影响估计。所以：负载包在满足条件的前提下尽量最小。前提：G足够大，单向延迟变化量足够大。
 
+令40< G<400, 100<=LN<=400,对A in [50,950]
+LN=100,q=0.01,得到G，若G<40，则令G=40,计算LN。
 A_E的计算：越简单越好->恢复的包前两个包延长，和均值的交点t_x，如果t_x超出t_L和t_H，则取(t_L+t_H)/2作为恢复时间。
 
 #### bqr-optimization
@@ -47,6 +329,7 @@ ADR实验验证了，无论非紧链路背景流量如何改变，时间是不�
 
 #### bqr
 2.04 检查包间隔固定200us，动态调整的是检查包的数量。好处是检查包（在清空队列后）不会受到中断延迟和长期空闲的影响；坏处是包开销翻倍了。
+
 #### 去噪
 
 空闲：如果包间隔大于1ms，无论是否关闭中断延迟，所有包都有概率被延迟60us！
@@ -81,24 +364,7 @@ IC对inspect阶段，若间隔低于64us则有影响，高于64us无影响
 负载包1500Mbps 100×1472B 785us
 检查包100×1472B 间隔200us 785-20785
 
-
-
-
-
-#### 
-cf=0 100Mbps 200Mbps
-A=1000 900 800
-P=1500B*100
-t=P/A=
-1200us 1333us 1500us
-
-1500B/A
-12us 13.3us 15us
-
-
-100Mbps
-1500B/100Mbps=120us
-#### linux network optimization
+#### linux network optimization 关闭中断延迟
 1. interrupt coalescing
 sudo ethtool -c enp27s0f0 
 sudo ethtool -C enp27s0f0 rx-usecs 0
@@ -112,6 +378,7 @@ ns3 应用
 包大小、包速率、包数量
 探测阶段
 包大小、间隔、数量
+
 #### 7.23
 可用带宽=探测包/探测总时间(探测时间+回复时间)
 * 无背景流量
@@ -132,14 +399,15 @@ ns3 应用
 * 添加测量delay正常值的步骤
 * 添加自动拟合下降直线的步骤
 * 添加自动选取发包数的步骤
+  
 #### 7.22
-
 500Mps背景流量 10000个探测包（约1000Mbps速率）实际接收了8949个包，发生丢包
 10000*1500B=15MB
 使用iperf3以最大速率发6MB丢包，推测路由缓冲区大小=6MB。
 6MB/1500B=4K。实际探测包可以更多，最大数量=缓冲区大小/背景流量速率/瓶颈链路发一个包时间
+
 #### 7.17
-设置路由到服务器的带宽1kMbps
+设置路由到服务器的带宽1Gbps
 iperf3 traffic -> server 900Mbps
 prober -> server 1000Mbps
 sudo ethtool enp27s0f0
@@ -161,8 +429,7 @@ client以1000Mbps向server发送10000个大小为1472B的UDP包（12us间隔）
 traffic设置0-1000Mbps流量
 DAG捕捉离开client和到达server的包
 
-
-####
+#### dagsnap 和 dagconvert
 先用dagsnap抓包erf
     ssh zhufengtian@192.168.5.1 "cd ~/jintao_test/dag_version/build && nohup ./server &" 1>run.log 2>&1
 	sudo dagsnap -d0 -s 20 -o traffic.erf 1>run.log 2>&1 &
@@ -215,6 +482,7 @@ sysctl -p | grep mem
 iperf3 -fm -M 9200 -V -c 192.168.2.4 -l 1m -w 32m
 iperf3 -fm -M 9200 -V -c 192.168.2.3 -l 1m -w 32m
 sysctl -w net.ipv4.tcp_rmem="4096 16777216 16777216"
+sysctl -w net.ipv4.tcp_wmem="4096 16777216 16777216"
 cat /proc/net/ipv4/tcp_rmem
 使用ping或者iperf3 UDP的最大MTU=9582，对应UDP数据大小=9554
 * 路由交换机端口说明：有物理l2口port和虚拟口vlan。物理口使用no switchport变成l3口。物理l2口无MTU，只有最大帧限制9600B。虚拟口和l3口有MTU，最大9216B。如果包超过9216B，会被路由器分块；如果包超过9600B，会无法发送。
@@ -232,28 +500,23 @@ cat /proc/net/ipv4/tcp_rmem
     dagsnap -d0 -o a.erf -s 10 -v
     设备 文件 时间 调试
 
-#### 带宽测量
+#### 带宽测量方法
 1. 变长分组
 Pathchar，Pchar
 2. 数据包对
 Bprobe、Sprobe、Capprobe
 3. SLoPS
 Spruce,Pipechar,pathneck
-#### 各种因素
-Iperf3
-设置UDP包大小，避免分包(UDP包拆分消耗CPU资源、增大丢包率)
-设置pacing-timer 10us-100us
 
-高速网卡
-gso和tso：使用iperf3测量链路带宽时，用tcp能测至10000Mbps，tso降低了cpu的负载 (为什么gso对udp无效-没有显著降低cpu负载)
+#### 各种误差来源因素
+Iperf3：设置UDP包大小，避免分包(UDP包拆分消耗CPU资源、增大丢包率)；设置pacing-timer 10us-100us
+
+高速网卡：gso和tso。使用iperf3测量链路带宽时，用tcp能测至10000Mbps，tso降低了cpu的负载 (为什么gso对udp无效-没有显著降低cpu负载)
 硬件时间戳支持：可能支持硬件时间戳，但不能每个包都获取硬件时间戳
 
-应用层send
-每次send至少需要c的时间，则最大探测速率为MTU+28/c，
-如果其间发生了进程切换，实际探测速率会更低
-send只是将数据提交到skb中，实际需要等网卡发送
-#### exp9 pathload效果测评
-6.22
+应用层send：每次send至少需要c的时间，则最大探测速率为MTU+28/c，如果其间发生了进程切换，实际探测速率会更低；send只是将数据提交到skb中，实际需要等网卡发送
+
+#### 6.22 exp9 pathload
 修改pathload_snd_fun里发送包间隔的时间
 pathload发包间隔控制——偏大，导致实际速率一直小于目标速率
 pathload没能正确估计链路容量
@@ -262,7 +525,6 @@ send平均时延：发送端调用一次send需要的时间
 recv平均时延：接收端调用一次recv需要的时间
 最小包间隔：2*Max(send,recv)
 最大发送速率：(MTU+28)/最小包间隔
-
 发送速率控制：
 t1-send-t2-select(sleep_time)-while
 tm_remaining=80us-14us=66us
@@ -270,11 +532,10 @@ sleep_tm_usec = tm_remaining - (tm_remaining%min_timer_intr)-min_timer_intr<200?
 min_sleep_interval：sleep 1us需要的时间 = 60us
 tm：min_sleep_interval+min_sleep_interval/4  75us
 min_timer_intr：sleep tm微秒需要的时间-min_sleep_interval  75us
-
 150+60=240us
 检测context switch、interrupt_coalescence
-#### 6.15 包大小实验总结
 
+#### 6.15 包大小实验总结
 因为tc的burst必须大于9KB，因此小包的前几个包的间隔会显著的小
 7%：包含tc的影响——9000B相对1500B的提升
 20%：消除了tc影响——9000B相对1500B的提升
@@ -306,32 +567,28 @@ problem to solve:
 
 控制背景流量的粒度g iperf3 -c 192.168.1.21 -ub 1000M -l 9000 --pacing-timer 1 -f m
 
-#### 6.3
+#### 6.3 队列首部异常
 数据分析
-间隔均值72us左右。列车的第一个间隔特别小，在30-60us间
+间隔均值72us左右。队列的第一个间隔特别小，在30-60us间
 解释：tc控制带宽，在突然到来一个包时，可以超过带宽；即src的前几个包间隔略小；
 sudo tcpdump -i vlan0 --time-stamp-precision=nano "src host 192.168.0.19 and dst host 192.168.1.21 and udp" -w traffic.pcap
 可能1：
 src发送第一个包和第二个包的间隔小
 可能2：
 router发送第一个和第二包的间隔小
-
 第二个间隔4us，第三个间隔100us(或68us)
-
 设置分析：
 tc等待区大于1000*9KB=9MB
-
 应用层提交包到套接字缓冲区skb，使用tbf调度，使用网卡发送包。
 网卡接收包，进入skb缓冲区，使用tbf调度，使用网卡发送包
 网卡接收包，进入skb缓冲区，应用层接收
 套接字缓冲区大小、tbf等待缓冲区大小均应大于列车大小
 前者过小，发包时会阻塞，增加进程切换的开销，包间隔会增大
-
 tc的rate单位默认bit=bps
 control.sh
 显示带宽、缓冲区、MTU
 
-#### 5.28
+#### 5.28 试验结果
 ***
 要点：
 * 背景流量越均匀越好
@@ -362,7 +619,7 @@ xgboost use set [0.9844617092119867, 1.0, 1.0, 1.0, 0.16326185, 0.20568985]
 ann not set [0.6677765445800962, 0.9211986681465039, 0.9974102848686645, 0.9996300406955235, 0.47988468, 2.6432664]
 ann use set [0.7880133185349611, 0.974472807991121, 0.9988901220865705, 0.9988901220865705, 0.37168342, 1.5472627]
 total 249.20557117462158 s
-#### 5.25
+#### 5.25 试验结果
 回归
 Lightgbm [0.984, 1.000, 1.0, 1.0, 0.122, 0.172] 6.76
 Xgboost  [0.981, 1.000, 1.0, 1.0, 0.073, 0.143] 20.63
@@ -374,18 +631,18 @@ Logistic regression   81.98% 5.1
 Lightgbm              98.68% 44.9
 Xgboost method        97.14% 29.6
 ANN                   98.46% 126.0
-#### 5.20
+#### 5.20 首次考虑队列恢复和可用带宽的联系
 探测方法：100*100的train，如何避免流量拥塞，每个train之间空开一段时间。改进：高可用带宽时等待间隔很短，测量很快；低可用带宽时，等待间隔大，One way delay恢复很慢，测量one way delay恢复速率。
 客户端首尾间隔，服务器每个包收到的时间，保存在客户端的data目录下
 最长用时=100*（等待间隔+测量时间），令测量包的平均速率为10Mbps，间隔T=9000*8*100/10=720000us=720ms，一次测量100s，总共10000s，
-#### 5.19
+#### 5.19 机器学习方法
 极大似然估计（多维、一维）
 线性、lightgbm、xgboost、ANN、RNN
 
-#### iperf发包原理
+#### iperf发包原理：粒度pacing-timer
 iperf定时执行任务：保存事件的时间，select等待这段时间。
 预设的pacing-timer=1000us=1ms
-#### 5.18
+#### 5.18 发现iperf3的粒度约100ms
 1. 可以使用tc控制探测机-流量源的速率；
 2. train中前两个包的时间偏小
 3. iperf的流量集中在2-3个相邻包间，即720us*n，n=3 4 5 一次发70个包，可以推测100ms进行一次发包
@@ -403,18 +660,17 @@ sudo tc qdisc del dev enp61s0f1 root; sudo tc qdisc add dev enp61s0f1 root tbf r
 发送方一次发100包，是否有效，
 随机睡眠一段时间，重复下一次
 总共进行10， 50， 100轮
-
 查看多少轮的平均接收时间
 
-#### 5.13
+#### 5.13 网卡软硬件时间戳
 如果不停发包，硬件时间戳会有不可用的情况
 如果发一个包，阻塞等时间戳，延迟200us
 接收方一直只能接收软件时间戳，最小间隔4us
 
-总结：
+网卡提供的硬件时间戳总结：
 1. 硬件时间戳(可能)比软件时间戳精确，但是不能连续获取，软件时间戳可以连续获取
-2. 接收时只能获取软件时间戳
-3. 使用SO_TIMESTAMPING选项获取时间戳的好处：尽可能接近网卡发出/接收包的时间，并且在内核获取时间开销小于用户态获取时间
+2. 接收时只能获取软件时间戳，发送时可以获取硬件时间戳
+3. 使用SO_TIMESTAMPING获取时间戳的好处：尽可能接近网卡发出/接收包的时间，并且内核获取时间开销小于用户态
 4. 获取软件时间戳可能增加发送单个包的时间
 5. 获取软件时间戳对发包的影响：接收端不变，发送端控制变量，观察接收端的软件时间戳
 6. 发送100个1500B的包，浮动大600-700us，浮动小550-580us
@@ -427,32 +683,24 @@ sudo tcpdump -i enp61s0f1 --time-stamp-precision=nano "src host 192.168.0.19 and
 tcpdump通过调用libpcap获取包，如果网卡支持
 ethtool -T ethX
 
-#### 5.11
+#### 5.11 iperf udp的丢包和速率和缓冲区大小
 iperf udp 速率100以上开始丢包
 iperf3 -c ip -u -f m -b 500M -l 1472 -w 8K
-包越大，cpu负载越小，丢包概率越大
-缓冲区越大，丢包概率越大
+包越大，cpu负载越小，丢包概率越大；缓冲区越大，丢包概率越大；
 -w 在速率为500Mbps时设为8K即可，buffer过小达不到目标速率，buffer过大丢包率过大（为什么发包越快需要的buffer越大-进程切换开销）
-
-先在链路带宽1000Mbps的情况下试验
-#### 5.10
-数据分析
-IGI/PTR
-pathload
-pathchirp
-抓包
+先在链路带宽1000Mbps的情况下试验。
+#### 5.10 tcpdump抓包命令
+抓包命令
 sudo tcpdump -i enp61s0f1 --time-stamp-precision=nano "src host 192.168.0.19 and dst host 192.168.1.21" -w igi.pcap
 sudo tcpdump -i enp61s0f1 --time-stamp-precision=nano "src host 192.168.0.19 and dst host 192.168.1.21" -w iperf.pcap
 sudo tcpdump -i enp61s0f1 --time-stamp-precision=nano "src host 192.168.0.19 and dst host 192.168.1.21" -w iperfudp.pcap
-
 udp模式需要对高带宽做出更改：受CPU限制，还是高丢包率？
 大段卸载（Large Segment Offload，简称LSO）是一种在高带宽网络中用于减少CPU使用率和增加发送吞吐量的技术，该技术通过网卡对过大的数据分段，而无需协议栈参与。该技术还有一些别称，当应用于TCP时被称为TCP段卸载(TSO)
 iperf3在万兆网络中实验时，TCP能达到万兆带宽，UDP只能达到3000-5000Mbps
 当发送包的数量越多，cpu负载越重。在发送包大小不变时，发送速率越大，cpu负载越大。
-#### 5.7
+#### 5.7 机器学习效果
 10000Mbps
 以1000Mbps为档位划分负载
-
 link，目标精度，样本精度，验证精度
 第一次试验81组数据
 第二次试验901组数据
@@ -511,13 +759,12 @@ method lightgbm use 12.104907035827637 seconds, acc 0.899875
 method xgboost use 82.78582715988159 seconds, acc 0.9260096562484487
 method keras_ann use 739.4592387676239 seconds, acc 0.86675
 
-##### 5.6
+##### 5.6 混杂
 redirect host new nexthop
 一个mac地址多个IP：ip aliasing
 一个物理网卡虚拟多个mac地址：ip link add vlan0 link eth0 type macvlan mode private
 监听经过虚拟网卡的所有流量-打开混杂模式：ip link set vlan0 promisc on或ifconfig eth1 promisc
 查看网卡是否处于混杂模式：netstat -i，P表示混杂模式
-
 使用IPerf3 udp模式，发包速率最大为3600Mbps
 UDP发包速率越大丢包率越高
 
@@ -527,11 +774,6 @@ UDP发包速率越大丢包率越高
 3. 增加单组数据量
     一组10个点，1000组，单组时间为11.776s
     一组50个点，1000组，单组时间为58.8s
-4. 
-
-
-
-
 
 ##### 5.3
 输入：sendtime recvtime link，对输入正则化
@@ -539,14 +781,9 @@ UDP发包速率越大丢包率越高
 方法：Logistic Regression、lightgbm、xgboost、keras
 效果最好的是xgboost，在使用了sendtime,recvtime,link后，准确率为91%
 sendtime和recvtime哪个重要？sendtime
-
 多层模型，更细粒度预测load，要怎么做？
-
 测量的数据如何改进，能提升准确率？
-
-
 使用sendtime recvtime预测link，准确率50%
-
 
 ##### 5.2
 对X不进行归一化，使用mae：
@@ -600,7 +837,7 @@ keras_method takes 32.45923590660095 s, acc 259.7786279764811
 对应的linkset为：
 [100, 200, 300, 400, 500, 600, 700, 800, 900]
 
-X加入link值，
+加入link值，
 keras_method takes 30.258543729782104 s, acc 0.9622222222222222
 keras_method takes 34.03348708152771 s, acc 29.982100479921883
 keras_method takes 27.074655771255493 s, acc 0.9377777777777778
@@ -654,29 +891,23 @@ Epoch 200/200
 第三行 报文的顺序index [CONTINOUS_COUNT_* PAIR_COUNT_]
 
 ##### 2020.4.22
-探测包是这样的：
+探测包：
 每次发送两个大小为MTU的UDP包，包的间隔为单个包在瓶颈链路上通过的时间；然后休息一段时间，发送下一个包对；
 设置间隔的目的：使两个包间所有背景流量都进入队列，这样可以累积背景流量包；
 设置休息间隔的目的：使总体的发包速率低于瓶颈链路速率，瓶颈链路的缓冲区不会溢出。
 
-问题1：
-clock_nanosleep不能精确控制发包间隔，如设置240us，实际100轮平均为346us，最小-最大区间为313-393us。
+问题1：clock_nanosleep不能精确控制发包间隔，比设置的值偏大。设置240us，实际100轮平均为346us，最小-最大区间为313-393us。
 如果使用igi-ptr的循环进行间隔控制，实际间隔平均700-800us，最小最大区间260-1000us
-
 发包间隔不精确的后果：若太大，部分两个包达到间的背景流量可能离开队列，
 
-问题2：
-select是否更精确
+问题2：select是否更精确
 
-问题3：
-在gin小于gB的情况下，背景流量是离散的包，因此gout-gin是离散的值，只能给出速率的区间估计
+问题3：在gin小于gB的情况下，背景流量是离散的包，因此gout-gin是离散的值，只能给出速率的区间估计
 
-问题4：
-只能估计在第一个包到达瓶颈链路入口至第二个包到达瓶颈链路入口期间的背景流量；
+问题4：只能估计在第一个包到达瓶颈链路入口至第二个包到达瓶颈链路入口期间的背景流量；
 如果背景流量的爆发性很强，包集中，有可能高估（探测集中在爆发区间）或低估（探测集中在非爆发期间）背景流量。
 
-问题5：
-在入口使用tc限速没有意义；
+问题5：在入口使用tc限速没有意义；
 
 ##### 2020.4.23
 探测源以100Mbps发两个探测包
@@ -693,11 +924,3 @@ sudo tcpdump -i enp3s0 "src 192.168.0.8 and dst port 11106"
 tcpdump的结果都是17us
 
 ./run.sh --capacity 100 --traffic 90 --rate 10 --filename c100t90r10.txt
-./run.sh --capacity 100 --traffic 80 --rate 10 --filename c100t80r10.txt
-./run.sh --capacity 100 --traffic 70 --rate 10 --filename c100t70r10.txt
-./run.sh --capacity 100 --traffic 60 --rate 10 --filename c100t60r10.txt
-./run.sh --capacity 100 --traffic 50 --rate 10 --filename c100t50r10.txt
-./run.sh --capacity 100 --traffic 40 --rate 10 --filename c100t40r10.txt
-./run.sh --capacity 100 --traffic 30 --rate 10 --filename c100t30r10.txt
-./run.sh --capacity 100 --traffic 20 --rate 10 --filename c100t20r10.txt
-./run.sh --capacity 100 --traffic 10 --rate 10 --filename c100t10r10.txt

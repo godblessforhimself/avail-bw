@@ -12,7 +12,7 @@
 	udpFd: fd for datagram
 */
 int listenFd = -1, listenPort = 11106, connFd = -1, udpFd = -1;
-int repeatNumber = 1, retryNumber = 5, loadNumber = 100, loadSize = 1472, inspectNumber = 0, inspectSize = 1472, inspectJumbo = 1, preheatNumber = 10, trainPacket;
+int repeatNumber = 1, retryNumber = 5, loadNumber = 100, loadSize = 1472, inspectNumber = 0, inspectSize = 1472, preheatNumber = 10, trainPacket, noUpdate;
 socklen_t sockLen = 0;
 sockaddr_in destAddress, srcAddress;
 string timestampFilename("timestamp.txt"), resultFilename("result.txt"), logFilename("log.txt");
@@ -21,31 +21,17 @@ int recvFlag = 0, busyPoll = 0, runOnce = 0;
 signalPacket sigPkt;
 double inspectGap, loadInspectGap;
 double beginTimeDouble, currentTimeDouble, tmpDouble;
-double *pool, *phin, *phout, *tin, *tout, *gin, *gout, *owd;
-double owdMin, owdMax, owdEnd;
-int poolPtr = 0;
-void initPool(){
-	trainPacket = loadNumber + inspectNumber * inspectJumbo;
-	int sum = preheatNumber * 2 + trainPacket * 2 + (trainPacket - 1) * 2 + trainPacket;
-	if (pool) {
-		delete [] pool;
-		pool = 0;
-		poolPtr = 0;
-	}
-	pool = new double[sum];
-	phin = poolAlloc(preheatNumber);
-	phout = poolAlloc(preheatNumber);
-	tin = poolAlloc(trainPacket);
-	tout = poolAlloc(trainPacket);
-	gin = poolAlloc(trainPacket - 1);
-	gout = poolAlloc(trainPacket - 1);
-	owd = poolAlloc(trainPacket);
-}
-double *poolAlloc(int number) {
-	int ret = poolPtr;
-	poolPtr += number;
-	return pool + ret;
-}
+double abw, abwLow, abwHigh;
+double preheatTx[1000], preheatRx[1000];
+double loadTx[10000], loadRx[10000], inspectTx[10000], inspectRx[10000];
+double loadOWD[10000], inspectOWD[10000];
+double lastMaxValue, lastMinValue, recoverThreshold;
+const double minimalAbw = 50.0, maximalAbw = 960.0;
+const double q = 0.01;
+const int defaultLoadNumber = 100;
+const int n1Global = 60;
+const double defaultInspectGap = 400;
+const double th1 = 100, th2 = 100, th3 = 50;
 void innerMain(int argc, char *argv[]){
 	signal(SIGINT, safeExit);
 	parseParameter(argc, argv);
@@ -67,20 +53,15 @@ void innerMain(int argc, char *argv[]){
 	safeExit(0);
 }
 void safeExit(int signal) {
-	if (pool) {
-		delete [] pool;
-		pool = 0;
-		poolPtr = 0;
-	}
 	closeSocket();
 	closeFile();
 	printf("safe exit\n");
 	exit(0);
 }
 void openFile() {
-	logFile = fopen(logFilename.c_str(), "a");
-	timeFile = fopen(timestampFilename.c_str(), "a");
-	resultFile = fopen(resultFilename.c_str(), "a");
+	logFile = fopen(logFilename.c_str(), "w");
+	timeFile = fopen(timestampFilename.c_str(), "w");
+	resultFile = fopen(resultFilename.c_str(), "w");
 }
 void qclose(FILE *&fp) {
 	if (fp != 0) {
@@ -191,8 +172,8 @@ void updateParam(const controlParameter& pkt) {
 	loadSize = pkt.param[3];
 	inspectNumber = pkt.param[4];
 	inspectSize = pkt.param[5];
-	inspectJumbo = pkt.param[6];
-	preheatNumber = pkt.param[7];
+	preheatNumber = pkt.param[6];
+	noUpdate = pkt.param[7];
 }
 void exchangeParameter() {
 	/* receive sender ctrlPacket */
@@ -208,23 +189,26 @@ void exchangeParameter() {
 	ctrlPacket.network2host();
 	/* update global parameters */
 	updateParam(ctrlPacket);
-	initPool();
-	fprintf(logFile, "repeatNumber %d, retryNumber %d, loadNumber %d, loadSize %d, inspectNumber %d, inspectSize %d, inspectJumbo %d, preheatNumber %d\n", repeatNumber, retryNumber, loadNumber, loadSize, inspectNumber, inspectSize, inspectJumbo, preheatNumber);
+	fprintf(logFile, "repeatNumber %d, retryNumber %d, loadNumber %d, loadSize %d, inspectNumber %d, inspectSize %d, preheatNumber %d\n", repeatNumber, retryNumber, loadNumber, loadSize, inspectNumber, inspectSize, preheatNumber);
 	fprintf(logFile, "-----------Parameter Exchange End------------\n");
 }
 int recvPreheat(){
-	return recvWithTimeout(0, inspectSize, preheatNumber, 1.0, phin, phout);
+	return recvWithTimeout(0, inspectSize, preheatNumber, 1.0, preheatTx, preheatRx);
 }
 int recvWithTimeout(int offset, int ps, int pn, double timeout, double *a, double *b) {
-	/* if packet gap exceeds timeout, discard the train */
+	/* 
+		if packet gap exceeds timeout, discard the train 
+		如果timeout大于0，存在一个包：等待时间超过timeout或者包i的id不为i+offset，则返回1 
+		时间保存在a,b中
+	*/
 	ssize_t ret;
 	int i = 0;
 	beginTimeDouble = getTimeDouble();
 	while (i < pn) {
 		ret = recv(udpFd, udpBuffer, ps, recvFlag);
 		currentTimeDouble = getTimeDouble();
-		tpBuffer->network2host();
 		if (ret == ps) {
+			tpBuffer->network2host();
 			if (tpBuffer->packetId == i + offset) {
 				a[i] = tpBuffer->timestamp[0];
 				b[i] = currentTimeDouble;
@@ -243,48 +227,18 @@ int recvWithTimeout(int offset, int ps, int pn, double timeout, double *a, doubl
 }
 int recvTrain(){
 	/* load, inspect */
-	if (recvWithTimeout(0, loadSize, loadNumber, 1.0, tin, tout)) return 1;
-	if (recvWithTimeout(loadNumber, inspectSize, inspectNumber * inspectJumbo, 1.0, tin + loadNumber, tout + loadNumber)) return 1;
+	if (recvWithTimeout(0, loadSize, loadNumber, 1.0, loadTx, loadRx))
+		return 1;
+	if (recvWithTimeout(loadNumber, inspectSize, inspectNumber, 1.0, inspectTx, inspectRx))
+		return 1;
+	/* OWD */
+	for (int i = 0; i < loadNumber; i++) {
+		loadOWD[i] = loadRx[i] - loadTx[i];
+	}
+	for (int i = 0; i < inspectNumber; i++) {
+		inspectOWD[i] = inspectRx[i] - inspectTx[i];
+	}
 	return 0;
-}
-void denoising(){
-
-}
-void updateOwd(){
-	for (int i = 0; i < trainPacket; i++) {
-		owd[i] = tout[i] - tin[i];
-	}
-	owdMax = owd[loadNumber - 1];
-	owdEnd = owd[trainPacket - 1];
-	owdMin = min(owd[0],owdEnd);
-}
-int getRecoverInfo(double &recoverDegree, int &recoverPos) {
-	/* 
-		define bound * (owdMax - owdMin) + owdMin as recovered
-		recoverPos - 1 not recovered
-		recoverPos recovered
-		recoverPos [loadNumber, loadNumber + inspectNumber)
-	*/
-	int recovered = 0;
-	if (owdMax <= owdMin) {
-		recoverDegree = 0;
-		return 0;
-	}
-	recoverDegree = (owdMax - owdEnd) / (owdMax - owdMin);
-	double owdBound = 0.05 * (owdMax - owdMin) + owdMin;
-	recoverPos = loadNumber;
-	while (recoverPos < trainPacket) {
-		if (owd[recoverPos] < owdBound) {
-			recovered = 1;
-			break;
-		} else {
-			recoverPos++;
-		}
-	}
-	return recovered;
-}
-double min(double a, double b) {
-	return a>b ? b : a;
 }
 double getX(double x1, double x2, double y1, double y2, double y) {
 	double ret;
@@ -295,175 +249,208 @@ double getX(double x1, double x2, double y1, double y2, double y) {
 	}
 	return ret;
 }
-double vaMin(double a, double b, double c, double d) {
-	return min(min(a,b),min(c,d));
-}
-double vaMax(double a, double b, double c) {
-	return (max(a,b),c);
-}
-int getSuggestion() {
-	/*
-		one way delay & remove noise
-		find recover idx & recover degree
-		if recovered adjust making it centered
-		if not recovered if see obvious recover degree, then estimate 
-		if vague recover trend, double duration
-		if centered, return satisfied = 1; else return 0;
-	*/
-	return 1;
-}
-void getPrediction(){
-	fprintf(logFile, "=============Predict Begins===========\n");
-	double ub1 = DoubleMax, sendRate, receiveRate, rateChange, lb1 = DoubleMin;
-	sendRate = getRate((loadNumber - 1) * loadSize, tin[loadNumber - 1] - tin[0]);
-	receiveRate = getRate((loadNumber - 1) * loadSize, tout[loadNumber - 1] - tout[0]);
-	rateChange = (receiveRate - sendRate) / sendRate;
-	/* if load owd is increasing, vin>vout>A, ub1=vout
-	   if load owd does not change, vin<A, lb1=vin */
-	if (owd[loadNumber - 1] > owd[0] && rateChange < -0.05){
-		ub1 = receiveRate;
-		fprintf(logFile, "load owd increasing, %.0f->%.0f, ub1 %.2f, rateChange %.2f\n", sendRate, receiveRate, ub1, rateChange);
-	} else {
-		lb1 = sendRate;
-		fprintf(logFile, "load owd isn't increasing, lb1=sendRate=%.2f\n", lb1);
-	}
-	/* 
-		if inspect owd is increasing, vinspect>A, ub2=vinspect
-		if inspect owd is decreasing and not recovered, lb3=vinspect, ub3=(A for recovered at the end)
-		if inspect owd is decreasing to recovered, lb4=(A for longer recovered time), ub4=(A for shorter recovered time).
-	*/
-	double ub2, ub3, ub4, lb3, lb4, inspectRate, recoverDegree;
-	int recoverPos, recoverFlag;
-	ub2 = ub3 = ub4 = DoubleMax;
-	lb3 = lb4 = DoubleMin;
-	inspectRate = getRate(inspectNumber * inspectSize * inspectJumbo, tin[trainPacket - 1] - tin[loadNumber - 1]);
-	recoverFlag = getRecoverInfo(recoverDegree, recoverPos);
-	fprintf(logFile,"inspect rate %.2f\n", inspectRate);
-	if (recoverDegree < 0.10) {
-		ub2 = inspectRate;
-		fprintf(logFile, "inspect owd increasing, ub2 %.2f\n", ub2);
-	} else if (!recoverFlag) {
-		lb3 = inspectRate;
-		ub3 = getRate((loadNumber - 1) * loadSize + inspectNumber * inspectSize * inspectJumbo, tin[trainPacket - 1] - tin[0]);
-		fprintf(logFile, "inspect owd decreasing not recovered, lb3, ub3 %.2f-%.2f\n", lb3, ub3);
-	} else if (recoverFlag) {
-		int bytesL, bytesU;
-		double tL, tU;
-		bytesL = (loadNumber - 1) * loadSize + (recoverPos - loadNumber + 1) * inspectSize * inspectJumbo;
-		tL = tin[recoverPos] - tin[0];
-		lb4 = getRate(bytesL, tL);
-		bytesU = (loadNumber - 1) * loadSize + max(recoverPos - 1 - loadNumber, 0) * inspectSize * inspectJumbo;
-		tU = tin[recoverPos - 1] - tin[0];
-		ub4 = getRate(bytesU, tU);
-		fprintf(logFile, "%d, %.6f\n%d, %.6f\n", bytesL, tL, bytesU, tU);
-		fprintf(logFile,"inspect owd decreasing to recovered & rp=%d, lb4 %.2f ub4 %.2f\n", recoverPos, lb4, ub4);
-	}
-	/* estimate using linear regression */
-	double abw = -1, x;
-	int properEstimation = 0;
-	if (recoverFlag) {
-		if (recoverPos >= loadNumber + 2) {
-			for (int posLeft = recoverPos - 1; posLeft >= loadNumber; posLeft--) {
-				for (int posRight = recoverPos; posRight > posLeft; posRight--) {
-					x = getX(tin[posLeft], tin[posRight], owd[posLeft], owd[posRight], owdMin);
-					if (x >= tin[recoverPos - 1] && x <= tin[recoverPos]) {
-						properEstimation = 1;
-						break;
-					}
-				}
-				if (properEstimation) {
-					break;
-				}
-			}
-			if (properEstimation) {
-				abw = getRate((loadNumber - 1) * loadSize + (recoverPos - 1) * inspectSize * inspectJumbo, x - tin[0]);
-			}
-		}
-	} else if (recoverDegree > 0.25) {
-		for (int posLeft = trainPacket - 2; posLeft >= loadNumber; posLeft--) {
-			for (int posRight = trainPacket - 1; posRight > posLeft; posRight--) {
-				x = getX(tin[posLeft], tin[posRight], owd[posLeft], owd[posRight], owdMin);
-				if (x > tin[trainPacket - 1]) {
-					properEstimation = 1;
-					break;
-				}
-			}
-			if (properEstimation) {
-				break;
-			}
-		}
-		if (properEstimation) {
-			abw = getRate((loadNumber - 1) * loadSize + inspectNumber * inspectSize * inspectJumbo, x - tin[0]);
-		}
-	}
-	fprintf(logFile, "recoverFlag %d, recoverDegree %.2f, properEstimation %d\n", recoverFlag, recoverDegree, properEstimation);
-	double ub, lb;
-	ub = vaMin(ub1, ub2, ub3, ub4);
-	lb = vaMax(lb1, lb3, lb4);
-	fprintf(logFile, "lower bound %.2f %.2f %.2f\n", lb1, lb3, lb4);
-	fprintf(logFile, "upper bound %.2f %.2f %.2f %.2f\n", ub1, ub2, ub3, ub4);
-	fprintf(logFile, "abw, lb, ub %.2f,%.2f,%.2f\n", abw, lb, ub);
-	fprintf(logFile, "=============END==========\n");
-	fprintf(resultFile, "%.2f,%.2f,%.2f\n", abw, lb, ub);
-}
 void writeTrain(int stream, int train, FILE *fp){
-	//fprintf(fp, "stream %d, train %d, loadNumber %d, inspectNumber %d, inspectJumbo %d\n", stream, train, loadNumber, inspectNumber, inspectJumbo);
-	for (int i = 0; i < trainPacket; i++) {
-		fprintf(fp, "%.6f,%.6f\n", tin[i], tout[i]);
+	for (int i = 0; i < loadNumber; i++) {
+		fprintf(fp, "%.6f,%.6f\n", loadTx[i], loadRx[i]);
+	}
+	for (int i = 0; i < inspectNumber; i++) {
+		fprintf(fp, "%.6f,%.6f\n", inspectTx[i], inspectRx[i]);
 	}
 	fprintf(fp, "\n");
 }
+int isRecovered(int lastNumber, double th1, double th2, double th3) {
+	/*
+		最后一个包的单向延迟可以小于首个包的单向延迟，但是不能大th1
+		最后lastNumber的最大值和最小值差小于th2
+		使用首个小于max(maxV,minV+th3*1e-6)作为恢复的下标
+	*/
+	assert(lastNumber < inspectNumber);
+	bool cond1 = inspectOWD[inspectNumber - 1] < loadOWD[0] + th1 * 1e-6;
+	double maxValue, minValue;
+	maxValue = minValue = inspectOWD[inspectNumber - 1];
+	int idx;
+	for (int i = inspectNumber - lastNumber; i < inspectNumber; i++) {
+		idx = i;
+		if (inspectOWD[idx] > maxValue)
+			maxValue = inspectOWD[idx];
+		if (inspectOWD[idx] < minValue)
+			minValue = inspectOWD[idx];
+	}
+	bool cond2 = maxValue < minValue + th2 * 1e-6;
+	lastMaxValue = maxValue;
+	lastMinValue = minValue;
+	/* 避免后10个owd的值非常集中 */
+	if (maxValue - minValue >= th3 * 1e6)
+		recoverThreshold = maxValue;
+	else
+		recoverThreshold = minValue + th3 * 1e-6;
+	fprintf(logFile, "isRecovered cond1 %s, cond2 %s\n", cond1 ? "True" : "False", cond2 ? "True" : "False");
+	return cond1 && cond2;
+}
+void getEstimation(int trainIdx, double &abwLow, double &abwHigh, double &abwEstimation) {
+	/*
+		下标ridx：单向延迟小于等于lastMaxValue的首个包下标（一定存在）
+		abwLow：ridx
+		abwHigh：ridx-1
+		abwEstimation：ridx-2,ridx-1与mean[ridx:]的交点是否在ridx和ridx-1内；否则取时间平均计算
+	*/
+	int ridx = 0;
+	double a;
+	for (int i = 0; i < inspectNumber; i++) {
+		a = inspectOWD[i];
+		if (a <= recoverThreshold) {
+			ridx = i;
+			break;
+		}
+	}
+	fprintf(logFile, "ridx %d\n", ridx);
+	if (ridx == 0) {
+		/* 可用带宽大于当前检查包所处的范围 */
+		int byte = loadNumber * loadSize;
+		double tLow = loadTx[loadNumber - 1] - loadTx[0];
+		double tHigh = inspectTx[0] - loadTx[0];
+		abwLow = getRate(byte, tHigh);
+		abwHigh = getRate(byte, tLow);
+		abwEstimation = abwLow;
+	} else {
+		int leftLow = (ridx - 2), Low = (ridx - 1), High = ridx;
+		double tLow = inspectTx[Low];
+		double tHigh = inspectTx[High];
+		double mean = 0;
+		double tLeftLow, tX, tBegin = loadTx[0];
+		int byte1, byte2;
+		byte1 = loadNumber * loadSize + (ridx - 1) * inspectSize;
+		byte2 = byte1 + inspectSize;	
+		for (int i = ridx; i < inspectNumber; i++) {
+			mean += inspectOWD[i];
+		}
+		if (inspectNumber != ridx) {
+			mean /= (inspectNumber - ridx);
+			if (ridx > 1) {
+				tLeftLow = inspectTx[leftLow];
+				tX = getX(tLeftLow, tLow, inspectOWD[leftLow], inspectOWD[Low], mean);
+				if (tX < tLow || tX > tHigh) {
+					tX = (tLow + tHigh) / 2;
+				}
+			} else {
+				tX = (tLow + tHigh) / 2;
+			}	
+			tX -= tBegin;
+			tHigh -= tBegin;
+			tLow -= tBegin;
+			fprintf(logFile, "tX %.0f tLow %.0f tHigh %.0f\n", tX * 1e6, tLow * 1e6, tHigh * 1e6);
+			fprintf(logFile, "byte1 %d byte2 %d\n", byte1, byte2);
+			abwEstimation = getRate(byte1, tX);
+			abwLow = getRate(byte2, tHigh);
+			abwHigh = getRate(byte1, tLow);
+			if (abwEstimation < abwLow) {
+				abwEstimation = (abwLow + abwHigh) / 2;
+				fprintf(logFile, "middle abw %.2f\n", abwEstimation);
+			}
+		}
+	}
+	fprintf(resultFile, "%d %.2f %.2f %.2f\n", trainIdx, abwEstimation, abwLow, abwHigh);
+}
+void getLN_G(double abwEstimation, double q, int &LN, double &G, int n1) {
+	/*
+		LN:loadNumber 10-100
+		G:inspectGap 20-400
+		P=(LN+IN/2)
+		x=P/A
+		G=qx
+		G=qP/A=q(LN+IN/2)*p/A
+		故G和LN是正相关，
+		当A较小时，G可能太小，导致q偏小，适当减小LN
+		当A较大时，LN可能偏小，导致q偏大，适当减小G
+		令LN=100,得到G，若G<40，令G=40,求得LN
+	*/
+	LN = 100;
+	double y = n1 * inspectSize;
+	G = q * (LN * loadSize + y) * 8 / abwEstimation;
+	if (G < 40) {
+		G = 40;
+		LN = (G * abwEstimation / q / 8 - y) / loadSize;
+		if (LN < 100) {
+			LN = 100;
+			fprintf(logFile, "check 1 %.2f %.2f\n", G, abwEstimation);
+		} else if (LN > 400) {
+			LN = 400;
+			fprintf(logFile, "check 2 %.2f %.2f\n", G, abwEstimation);
+		}
+	} else if (G > 400) {
+		G = defaultInspectGap;
+		LN = defaultLoadNumber;
+	}
+	fprintf(logFile, "getLN_G(%.0f)=(%d,%.2f)\n", abwEstimation, LN, G);
+}
+void resetLN_G(int &LN, double &G, double &abw){
+	LN = defaultLoadNumber;
+	G = defaultInspectGap;
+	abw = minimalAbw;
+}
 void mainReceive(){
-	int preheatRepeat = 0;
+	/* 预热阶段 */
 	if (preheatNumber > 0) {
+		int preheatRepeat = 0;
 		int preheatLost = 0;
-		sigPkt = {ctrlSignal::preheat, 0};
+		sigPkt = {ctrlSignal::preheat, 0, 0, 0};
 		do {
 			if (preheatLost)
-				sigPkt = {ctrlSignal::preheatTimeout, 0};
+				sigPkt = {ctrlSignal::preheatTimeout, 0, 0, 0};
 			sendSignal(connFd, &sigPkt);
 			preheatLost = recvPreheat();
 			preheatRepeat++;
 		} while (preheatLost);
-		fprintf(logFile, "========== preheat %d tries\n", preheatRepeat);
-		for (int i = 0; i < preheatNumber; i++) {
-			fprintf(logFile, "%.6f,%.6f\n", phin[i], phout[i]);
-		}
-		fprintf(logFile, "=========  preheat End=======\n");
 	}
-	int streamNumber = 0, trainNumber = 0, satisfied = 0, trainLost = 0, exitFlag = 0;
-	sigPkt = {ctrlSignal::firstTrain, 0};
+	/* 循环阶段 */
+	int streamNumber = 0, trainNumber = 0, trainLost = 0, exitFlag = 0, recoverFlag = 0, specialFlag = 1;
+	abw = minimalAbw;
+	inspectGap = defaultInspectGap;
+	sigPkt = {ctrlSignal::firstTrain, loadNumber, abw, inspectGap, specialFlag};
+	int lastNumber = 10;
 	while (1) {
 		sendSignal(connFd, &sigPkt);
 		if (exitFlag == 1)
 			break;
 		trainLost = recvTrain();
 		if (trainLost == 1) {
-			sigPkt = {ctrlSignal::retransmit, 0};
+			sigPkt = {ctrlSignal::retransmit, 0, 0, 0};
 			fprintf(logFile, "train lost detected\n");
 		} else if (trainLost == 0) {
-			fprintf(logFile, "=====send %d, %d=======\n", streamNumber, trainNumber);
+			fprintf(logFile, "=====stream %d, retry %d=======\n", streamNumber, trainNumber);
 			writeTrain(streamNumber, trainNumber, timeFile);
-			satisfied = getSuggestion();
+			recoverFlag = isRecovered(lastNumber, th1, th2, th3);
+			if (recoverFlag) {
+				abwLow = minimalAbw;
+				abwHigh = maximalAbw;
+				abw = minimalAbw;
+				getEstimation(streamNumber, abwLow, abwHigh, abw);
+				fprintf(logFile, "Estimation: [%.0f, %.0f], %.0f\n", abwLow, abwHigh, abw);
+				if (abw > 0 && !noUpdate)
+					getLN_G(abw, q, loadNumber, inspectGap, n1Global);
+				specialFlag = 0;
+			} else if (!noUpdate) {
+				resetLN_G(loadNumber, inspectGap, abw);
+				fprintf(logFile, "resetDefault\n");
+				specialFlag = 1;
+			}
 			trainNumber++;
-			if (!satisfied && trainNumber < retryNumber) {
-				sigPkt = {ctrlSignal::nextTrain, 0};
+			if (trainNumber < retryNumber) {
+				sigPkt = {ctrlSignal::nextTrain, loadNumber, abw, inspectGap, specialFlag};
 			} else {
-				getPrediction();
 				streamNumber++;
 				if (streamNumber < repeatNumber) {
 					trainNumber = 0;
-					sigPkt = {ctrlSignal::nextStream, 0};
+					sigPkt = {ctrlSignal::nextStream, loadNumber, abw, inspectGap, specialFlag};
 				} else {
-					sigPkt = {ctrlSignal::end, 0};
+					sigPkt = {ctrlSignal::end, 0, 0, 0, 0};
 					exitFlag = 1;
 				}
 			}
 		}
-	};
+	}
 	fprintf(resultFile, "\n");
 }
-
 void clean() {
 	close(connFd);
 	closeFile();

@@ -38,7 +38,7 @@ ip address 10.0.3.2 24
 # 10Gbps
 interface XGigabitEthernet0/0/1
 undo portswitch
-ip address 10.0.3.2 24
+ip address 10.1.3.2 24
 # 
 interface XGigabitEthernet0/0/2
 undo portswitch
@@ -46,7 +46,7 @@ ip address 10.0.4.2 24
 # 10Gbps 5.1
 interface XGigabitEthernet0/0/4
 undo portswitch
-ip address 10.0.5.1 24
+ip address 10.1.5.1 24
 # 1Gbps 5.1
 interface GigabitEthernet0/0/1
 undo portswitch

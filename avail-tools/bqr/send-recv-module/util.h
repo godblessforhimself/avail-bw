@@ -45,7 +45,10 @@ struct timestampPacket {
 };
 struct signalPacket{
 	int signal;
-	double param;
+	int loadNumber;
+	double abw;
+	double inspectGap;
+	int specialFlag;
 	void host2network();
 	void network2host();
 };

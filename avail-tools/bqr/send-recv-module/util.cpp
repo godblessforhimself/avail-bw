@@ -6,9 +6,13 @@ char udpBuffer[MaxBufferLength];
 timestampPacket *tpBuffer = (timestampPacket*)udpBuffer;
 void signalPacket::network2host(){
 	signal = ntohl(signal);
+	loadNumber = ntohl(loadNumber);
+	specialFlag = ntohl(specialFlag);
 }
 void signalPacket::host2network(){
 	signal = htonl(signal);
+	loadNumber = htonl(loadNumber);
+	specialFlag = htonl(specialFlag);
 }
 void controlParameter::network2host() {
 	size_t len = sizeof(param)/sizeof(param[0]);
@@ -99,6 +103,7 @@ void printTimespec(timespec t){
 	printf("%10lu %09lu\n", t.tv_sec, t.tv_nsec);
 }
 void sendSignal(int fd, signalPacket *sp) {
+	/* sp 未做网络本地转换 */
 	ssize_t ret;
 	sp->host2network();
 	memcpy(udpBuffer, sp, sizeof(signalPacket));
