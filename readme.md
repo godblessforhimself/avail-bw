@@ -1,45 +1,138 @@
+####
+1. Loss related mechanism RED WRED
+2. Buffer related mechanism Router buffer policy
+
+sender [113] 1120us,29720us [99]=13990us
+traffic [130]=21677<[131]=43734 temp[88]=13812<temp[89]=14233
+pareto在发送完100个负载包时，流量包为89个，
+constant t=constant[99] np.searchsorted(traffc['constant'],t)-1 61个
+poisson 56个
+  o
+  |
+o-o-o
+#### RED/WRED
+华为FAQ-CE系列交换机缓存
+https://support.huawei.com/enterprise/zh/knowledge/EKB1000051901
+交换机缓冲区
+https://community.cisco.com/t5/networking-documents/egress-qos/ta-p/3122802
+缓冲区需求review
+https://people.ucsc.edu/~warner/Bufs/buffer-requirements
+TCP对缓冲区大小的需求
+https://www.es.net/assets/pubs_presos/NANOG64mnsmitasinbltierneybuffersize.pptx.pdf
+#### 路由器缓冲区大小
+动态缓存+静态缓存
+大缓存流量管理引擎
+缺省情况下，报文进入大缓存流量管理引擎进行报文缓存和调度，此时当设备的所有接口均有大流量报文转发时，设备无法满足无丢包转发的要求
+缺省情况下，接口缓存较小，接口流量如果突发达到接口带宽的50%～60%左右就会出现丢包现象。设备缓存采用“静态+动态”的方式进行分配。每个接口默认分配一部分静态缓存，以提供基本的缓存保证；剩余缓存作为设备动态缓存。当一个接口上某个队列有较大的突发流量时，可以配置qos queue buffer shared-ratio增加该队列可以占用的动态缓存的最大百分比。设备将为该队列分配较多的动态缓存，减少该队列
+的丢包
+display qos configuration
+qos burst mode enhanced/extreme
+display qos queue statistics
+1Gbps,10Gbps->3000*9000B=27MB
+#### 获取包大小CDF
+tshark -r /home/ubuntu2/pcapFiles/caida2.pcap -n -T fields -e frame.time_epoch -e frame.len > /home/ubuntu2/pcapFiles/caida2.len
+tshark -r /home/tony/pcapFiles/bigFlows1.pcap -n -T fields -e frame.time_epoch -e frame.len > /home/tony/pcapFiles/bigFlows1.len
+rsync -avz ubuntu2@192.168.66.17:/home/ubuntu2/pcapFiles/caida2.len /home/tony/pcapFiles/caida2.len
+#### IMC论文图片
+figure(figsize=(2.8, 1.7), dpi=300)
+plt.rcParams['font.sans-serif']=['Arial']
+plt.grid(linestyle = "--")
+ax = plt.gca()
+ax.spines['top'].set_visible(False)  #去掉上边框
+ax.spines['right'].set_visible(False) #去掉右边框
+plt.legend(loc='lower right', prop={'family':'Times New Roman', 'size':8})
+plt.xlabel('iterations', fontdict={'family' : 'Times New Roman', 'size':8})
+plt.yticks(np.arange(0, 1.1, 0.2), fontproperties = 'Times New Roman', fontsize=8)
+无上边框、右边框
+grid是虚线
+表上方、下方无标题
+折线图点数较少时，使用带标记的折线
+选择合理颜色
+#### bigFlows效果不如CAIDA
+当前使用30秒测量时间
+拓展到10段变化，每段持续10秒
+#### 为recv-module添加更多的信息
+添加在流量突发的情况下，owd曲线的更多信息
+负载包、检查包、整个阶段 最低点、最高点的值和下标
+整个阶段最低点下标、值（0），最高点下标、值，负载包
+./send-main --loadRate 1500 --loadSize 1472 --inspectSize 1472 --loadNumber 100 --inspectNumber 100 --repeatNumber 400 --streamGap 40000 --dest 10.0.7.1 --minAbw 50 --maxAbw 1200 --minGap 40 --maxGap 10000 --Gap 400 --n1 80 --n2 20
+#### BQR更新
+检查包分为n1和n2两段，n1段需要minAbw/maxAbw/minGap/maxGap限制，n2段需要Gap限制
+#### 动态调整检查包数量
+10Gbps/无背景流量/minAbw=50/minGap=40/maxGap=400->inspectNumber=183
+owd 0 25 458
+10Gbps/100Mbps背景流量/minAbw=50/minGap=40/maxGap=400->inspectNumber=183
+owd 0 36 560
+10Gbps/900Mbps背景流量/minAbw=50/minGap=300/maxGap=400->inspectNumber=141
+owd 0 110 1178 未恢复
+10Gbps/900Mbps背景流量/minAbw=50/minGap=500/maxGap=500->inspectNumber=100
+owd 0 54 1196 已恢复
+10Gbps/100Mbps背景流量/minAbw=50/minGap=500/maxGap=500->inspectNumber=100
+owd 0 20 550 已恢复 但第一个区间太大
+10Gbps/100Mbps背景流量/minAbw=50/minGap=40/maxGap=1000->inspectNumber=126
+owd 0 20 550 已恢复 但第一个区间太大 862/877
+10Gbps/100Mbps背景流量/minAbw=600/minGap=40/maxGap=1000->inspectNumber=126
+owd 0 20 550 已恢复 但第一个区间太大 
+### 做bigFlows.pcap+CAIDA的两个实验
+以0.1倍速率进行播放，平均速率400Mbps
+sudo tcpreplay -i ens1f0 -x 0.1 --duration=60 --stats=5 2.pcap
+使用DAG捕捉流量，以秒级别进行估计
+流量在毫秒级别无明显关系，在秒级别比较稳定
+BQR测量结果与秒级别的均值相同，且一起变化
+构造一个流量，由三部分组成，每部分的秒速率不同
+30秒×3
+
+流量预处理：去除ICMP和IPv6
+bigFlows.pcap -> bigFlows2.pcap
+bigFlows2.pcap 300s 9.466Mbps
+equinix-nyc.dirA.20180816-125910.UTC.anon.pcap -> caida3.pcap
+caida3.pcap 50s 4367Mbps
+
+### DAG
+以4431Mbps持续49秒：
+sudo tcpreplay -i ens1f0 -p 6000 --pps-multi=100 --netmap 2.pcap
+以443Mbps持续490秒：
+sudo tcpreplay -i ens1f0 -p 6000 --pps-multi=10 --duration=10 2.pcap
+-x -p -M -t -o
+--pps-multi=10
+awk 'NR==1{x=$1}{print $1-x,$2}' /home/ubuntu2/pcapFiles/2.len > /home/ubuntu2/pcapFiles/2-z.len
+awk 'NR==1{x=$1}{print $1-x,$2}' /tmp/dag/c.len > /tmp/dag/c-z.len
+head -n 1 /tmp/dag/c.pcap
+tshark -r /tmp/dag/c.pcap -Y "frame.number == 15749"
+sudo dagsnap -d0 -s 360 -o /tmp/dag/dagsnap.erf 1>/tmp/dag/dagsnap.log 2>&1 &
+sudo dagconvert -T erf:pcap -i /tmp/dag/dagsnap.erf -f c -o /tmp/dag/c.pcap
+tshark -r /tmp/dag/c.pcap -T fields -e frame.time_epoch -e frame.len > /tmp/dag/c.len
+tshark -r /home/ubuntu2/pcapFiles/2.pcap -T fields -e frame.time_epoch -e frame.len > /home/ubuntu2/pcapFiles/2.len
+### 10Gbps
+在10Gbps下时，BQR固定阈值的参数需要修改。
+10Gbps下是OWD曲线有突然降低的现象。
+
+nohup /home/ubuntu5/abw-project/avail-tools/bqr/send-recv-module/build/recv-main --timestamp /tmp/bqr/timestamp.txt --result /tmp/bqr/result.txt --log /tmp/bqr/log.txt --polling 1 --busy-poll -1 --once 1>/tmp/bqr/rx.log 2>&1 &
+/home/ubuntu1/abw-project/avail-tools/bqr/send-recv-module/build/send-main --loadRate 1500 --loadSize 1472 --inspectSize 1472 --loadNumber 100 --inspectNumber 100 --repeatNumber 10 --retryNumber 1 --preheatNumber 0 --streamGap 1000 --trainGap 0 --dest 10.1.7.1 --noUpdate 1 --minAbw 50
+
+# 修改链路MTU
+ping -c 1 -s 1472 -M do 10.0.7.1
+ping -c 1 -s 8972 -M do 10.0.7.1
+ip link set <dev> mtu 9000
+netplan
+a4:fa:76:01:3d:f0
 http://www.spin.rice.edu/Software/poisson_gen/
 10Gbps的实验
 
 rsync -avz amax@192.168.67.84:/home/amax/guohaorui/throughput_plot/equinix-nyc.dirA.20180816-125910.UTC.anon.pcap /home/tony/pcapFiles
 rsync -avz /home/tony/pcapFiles/equinix-nyc.dirA.20180816-125910.UTC.anon.pcap ubuntu2@192.168.66.17:/home/ubuntu2/pcapFiles
 
-去除ipv6 icmp6
-tcpdump -r /home/tony/pcapFiles/equinix-nyc.dirA.20180816-125910.UTC.anon.pcap -nN -w /home/tony/pcapFiles/ip4.pcap "not ip6 and not icmp6"
-修改ether和IP
-time sudo tcprewrite --dlt=enet --srcipmap=0.0.0.0/0:10.0.1.1/32 --dstipmap=0.0.0.0/0:10.0.7.1/32 --enet-smac=a4:fa:76:01:43:f8 --enet-dmac=60:12:3c:3f:bc:d3 --infile=/home/tony/pcapFiles/ip4.pcap --outfile=/home/tony/pcapFiles/ip4-address.pcap
-填补空白
-./main /home/tony/pcapFiles/ip4-address.pcap /home/tony/pcapFiles/ip4-full.pcap
-统计长度
-tshark -r /home/tony/pcapFiles/ip4-full.pcap -T fields -e frame.time_epoch -e frame.len > ip4.len
-发到node2
-rsync -avz /home/tony/pcapFiles/ip4-full.pcap ubuntu2@192.168.66.17:/home/ubuntu2/pcapFiles
-播放
-sudo tcpreplay-edit --intf1 ens1f1 --fixcsum --duration=1 /home/ubuntu2/pcapFiles/ip4-full.pcap
-
-time sudo tcpreplay-edit --srcipmap=0.0.0.0/0:10.1.2.1/32 --dstipmap=0.0.0.0/0:10.1.7.1/32 --enet-smac=a4:fa:76:01:43:f8 --enet-dmac=60:12:3c:3f:bc:d3 --fixlen=pad --fixcsum --intf1 ens1f0 --stats=2 -x 10 --netmap /home/ubuntu2/pcapFiles/equinix-nyc.dirA.20180816-125910.UTC.anon.pcap
-
-time sudo tcpreplay-edit --srcipmap=0.0.0.0/0:10.0.2.1/32 --dstipmap=0.0.0.0/0:10.0.7.1/32 --enet-smac=a4:fa:76:01:43:f8 --enet-dmac=60:12:3c:3f:bc:d3 --fixlen=pad --fixcsum --intf1 ens1f0 --stats=1 --duration=10 --netmap bigFlows.pcap
-
-time sudo tcpreplay-edit --srcipmap=0.0.0.0/0:10.0.2.1/32 --dstipmap=0.0.0.0/0:10.0.7.1/32 --enet-smac=a4:fa:76:01:43:f8 --enet-dmac=60:12:3c:3f:bc:d3 -x 100 --fixcsum --intf1 ens1f0 --stats=1 --netmap bigFlows.pcap
-
+netmap需要下载ixgbe硬件
 rsync -avz /home/tony/Downloads/ixgbe-5.3.8.tar.gz ubuntu2@192.168.66.17:/home/ubuntu2/netmap/LINUX/ext-drivers
 
-tcpreplay -i ens1f0 --netmap bigFlows.pcap
-
-tcprewrite --dlt=enet -i /home/ubuntu2/pcapFiles/ip4.pcap -o /home/ubuntu2/pcapFiles/1.pcap --srcipmap=0.0.0.0/0:10.0.2.1/32 --dstipmap=0.0.0.0/0:10.0.7.1/32 --enet-smac=a4:fa:76:01:43:f8 --enet-dmac=60:12:3c:3f:bc:d3 --fixlen=pad --fixcsum --mtu-trunc
-目标文件包长度最小=50B=46B+4B，最大=1504B=1500B+4B，先去除IPv6和ICMP6包，再将其大小-4B。
+caida包长度最小=50B=46B+4B，最大=1504B=1500B+4B，先去除IPv6和ICMP6包，再将其大小-4B。
 使用tcprewrite进行转换
-1.
-tcpdump -r /home/tony/pcapFiles/equinix-nyc.dirA.20180816-125910.UTC.anon.pcap -nN -w /home/tony/pcapFiles/ip4.pcap "not ip6 and not icmp6"
-2.
-time ./main /home/tony/pcapFiles/ip4.pcap /home/tony/pcapFiles/ip4-reduced.pcap 
-3.
-rsync -avz /home/tony/pcapFiles/ip4-reduced.pcap ubuntu2@192.168.66.17:/home/ubuntu2/pcapFiles/ip4-reduced.pcap
-4.
-tcprewrite --dlt=enet -i /home/ubuntu2/pcapFiles/ip4-reduced.pcap -o /home/ubuntu2/pcapFiles/1.pcap --srcipmap=0.0.0.0/0:10.0.2.1/32 --dstipmap=0.0.0.0/0:10.0.7.1/32 --enet-smac=a4:fa:76:01:43:f8 --enet-dmac=60:12:3c:3f:bc:d3 --fixlen=pad --fixcsum
-5. 
-sudo tcpreplay -i ens1f0 -t 1.pcap --stats=3
+1.tcpdump -r /home/tony/pcapFiles/equinix-nyc.dirA.20180816-125910.UTC.anon.pcap -nN -w /home/tony/pcapFiles/ip4.pcap "not ip6 and not icmp6"
+2.time ./main /home/tony/pcapFiles/ip4.pcap /home/tony/pcapFiles/ip4-reduced.pcap 
+3.rsync -avz /home/tony/pcapFiles/ip4-reduced.pcap ubuntu2@192.168.66.17:/home/ubuntu2/pcapFiles/ip4-reduced.pcap
+4.tcprewrite --dlt=enet -i /home/ubuntu2/pcapFiles/ip4-reduced.pcap -o /home/ubuntu2/pcapFiles/1.pcap --srcipmap=0.0.0.0/0:10.0.2.1/32 --dstipmap=0.0.0.0/0:10.0.7.1/32 --enet-smac=a4:fa:76:01:43:f8 --enet-dmac=60:12:3c:3f:bc:d3 --fixlen=pad --fixcsum
+tcprewrite --dlt=enet -i /home/ubuntu2/pcapFiles/ip4-reduced.pcap --srcipmap=0.0.0.0/0:10.1.2.1/32 --dstipmap=0.0.0.0/0:10.1.7.1/32 --enet-smac=a4:fa:76:01:43:f8 --enet-dmac=60:12:3c:3f:bc:d3 --fixlen=pad --fixcsum -o /home/ubuntu2/pcapFiles/2.pcap
+sudo tcpreplay -i ens1f0 -t 2.pcap
 
 
 #### bigFlows.pcap

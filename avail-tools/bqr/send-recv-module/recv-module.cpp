@@ -6,13 +6,14 @@
 #include <iostream>
 #include <fstream>
 #include <iomanip>
+#include <limits>
 /*
 	listenFd: wait for sender
 	connFd: fd for sender connection
 	udpFd: fd for datagram
 */
 int listenFd = -1, listenPort = 11106, connFd = -1, udpFd = -1;
-int repeatNumber = 1, retryNumber = 5, loadNumber = 100, loadSize = 1472, inspectNumber = 0, inspectSize = 1472, preheatNumber = 10, trainPacket, noUpdate;
+int repeatNumber = 1, retryNumber = 5, loadNumber = 100, loadSize = 1472, inspectNumber = 100, inspectSize = 1472, preheatNumber = 10, trainPacket, noUpdate;
 socklen_t sockLen = 0;
 sockaddr_in destAddress, srcAddress;
 string timestampFilename("timestamp.txt"), resultFilename("result.txt"), logFilename("log.txt");
@@ -31,7 +32,75 @@ const double q = 0.01;
 const int defaultLoadNumber = 100;
 const int n1Global = 60;
 const double defaultInspectGap = 400;
-const double th1 = 100, th2 = 100, th3 = 50;
+double th1 = 100, th2 = 300, th3 = 50;
+struct description {
+	double values[6]; // global min, global max, load min, load max, inspect min, inspect max
+	int indexs[6]; // index of above values
+	description() {
+		for (int i = 0; i < 6; i++) {
+			if (i % 2 == 0) {
+				values[i] = std::numeric_limits<double>::max();
+			} else {
+				values[i] = std::numeric_limits<double>::lowest();
+			}
+			indexs[i] = -1;
+		}
+	}
+};
+void getDescription(struct description &a) {
+	double temp;
+	for (int i = 0; i < loadNumber; i++) {
+		temp = loadOWD[i];
+		if (temp < a.values[0]) {
+			a.values[0] = temp;
+			a.indexs[0] = i;
+		}
+		if (temp < a.values[2]) {
+			a.values[2] = temp;
+			a.indexs[2] = i;
+		}
+		if (temp > a.values[1]) {
+			a.values[1] = temp;
+			a.indexs[1] = i;
+		}
+		if (temp > a.values[3]) {
+			a.values[3] = temp;
+			a.indexs[3] = i;
+		}
+	}
+	for (int i = 0; i < inspectNumber; i++) {
+		temp = inspectOWD[i];
+		if (temp < a.values[0]) {
+			a.values[0] = temp;
+			a.indexs[0] = i + loadNumber;
+		}
+		if (temp < a.values[4]) {
+			a.values[4] = temp;
+			a.indexs[4] = i + loadNumber;
+		}
+		if (temp > a.values[1]) {
+			a.values[1] = temp;
+			a.indexs[1] = i + loadNumber;
+		}
+		if (temp > a.values[5]) {
+			a.values[5] = temp;
+			a.indexs[5] = i + loadNumber;
+		}
+	}
+	temp = a.values[0];
+	for (int i = 0; i < 6; i++) {
+		a.values[i] -= temp;
+	}
+}
+void fprintDescription(struct description &a) {
+	for (int i = 0; i < 6; i++) {
+		fprintf(resultFile, "%6.0f %4d", a.values[i] * 1e6, a.indexs[i]);
+		if (i != 5)
+			fprintf(resultFile, " ");
+		else
+			fprintf(resultFile, "\n");
+	}
+}
 void innerMain(int argc, char *argv[]){
 	signal(SIGINT, safeExit);
 	parseParameter(argc, argv);
@@ -87,6 +156,9 @@ static struct option longOptions[] = {
 	{"polling",   required_argument, 0,  5},
 	{"busy-poll", required_argument, 0,  6},
 	{"once",            no_argument, 0,  7},
+	{"thres1",    required_argument, 0,  8},
+	{"thres2",    required_argument, 0,  9},
+	{"thres3",    required_argument, 0, 10},
 	{0,           0,                 0,  0}
 };
 void parseParameter(int argc, char *argv[]) {
@@ -115,6 +187,15 @@ void parseParameter(int argc, char *argv[]) {
 				break;
 			case 7:
 				runOnce = 1;
+				break;
+			case 8:
+				th1 = atof(optarg);
+				break;
+			case 9:
+				th2 = atof(optarg);
+				break;
+			case 10:
+				th3 = atof(optarg);
 				break;
 			default:
 				printf("getopt returned character code 0%o\n", c);
@@ -190,6 +271,7 @@ void exchangeParameter() {
 	/* update global parameters */
 	updateParam(ctrlPacket);
 	fprintf(logFile, "repeatNumber %d, retryNumber %d, loadNumber %d, loadSize %d, inspectNumber %d, inspectSize %d, preheatNumber %d\n", repeatNumber, retryNumber, loadNumber, loadSize, inspectNumber, inspectSize, preheatNumber);
+	fprintf(logFile, "th1 %3.0f, th2 %3.0f, th3 %3.0f\n", th1, th2, th3);
 	fprintf(logFile, "-----------Parameter Exchange End------------\n");
 }
 int recvPreheat(){
@@ -349,7 +431,6 @@ void getEstimation(int trainIdx, double &abwLow, double &abwHigh, double &abwEst
 			}
 		}
 	}
-	fprintf(resultFile, "%d %.2f %.2f %.2f\n", trainIdx, abwEstimation, abwLow, abwHigh);
 }
 void getLN_G(double abwEstimation, double q, int &LN, double &G, int n1) {
 	/*
@@ -418,8 +499,12 @@ void mainReceive(){
 			fprintf(logFile, "train lost detected\n");
 		} else if (trainLost == 0) {
 			fprintf(logFile, "=====stream %d, retry %d=======\n", streamNumber, trainNumber);
+			fprintf(logFile, "duration %.0fus\n", (inspectTx[inspectNumber - 1] - loadTx[0]) * 1e6);
 			writeTrain(streamNumber, trainNumber, timeFile);
-			recoverFlag = isRecovered(lastNumber, th1, th2, th3);
+			if (inspectNumber > 0)
+				recoverFlag = isRecovered(lastNumber, th1, th2, th3);
+			else
+				recoverFlag = false;
 			if (recoverFlag) {
 				abwLow = minimalAbw;
 				abwHigh = maximalAbw;
@@ -434,6 +519,14 @@ void mainReceive(){
 				fprintf(logFile, "resetDefault\n");
 				specialFlag = 1;
 			}
+			if (recoverFlag) {
+				fprintf(resultFile, "%4d %6.2f %6.2f %6.2f ", streamNumber, abw, abwLow, abwHigh);
+			} else {
+				fprintf(resultFile, "%4d %6.2f %6.2f %6.2f ", streamNumber, -1.0, -1.0, -1.0);
+			}
+			struct description a;
+			getDescription(a);
+			fprintDescription(a);
 			trainNumber++;
 			if (trainNumber < retryNumber) {
 				sigPkt = {ctrlSignal::nextTrain, loadNumber, abw, inspectGap, specialFlag};

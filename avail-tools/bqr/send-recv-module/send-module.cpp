@@ -3,7 +3,6 @@
 	预热包，preheatNumber个，loadSize的包，间隔preheatGap微秒
 	preheat发送失败会重发
 
-
 	stream:
 	数量repeatNumber，间隔streamGap；每个stream包含最多retryNumber个train。train-train的间隔为trainGap。
 	train发送失败会重发
@@ -13,26 +12,27 @@
 
 	严格按照参数进行发送，参数由接收端程序进行设置；
 	需要设置的参数：负载包数量ln、检查包间隔G、可用带宽估计abw
-
 */
 #include "send-module.h"
 #include "util.h"
 #include <algorithm>
 
-int tcpFd = -1, udpFd = -1, destPort = 11106, globalPacketId = 0, noUpdate = 0;
-int repeatNumber = 1, retryNumber = 5, loadNumber = 100, loadSize = 1472, inspectNumber = 0, inspectSize = 1472, preheatNumber = 0;
-double loadRate = 0, streamGap = 10000, trainGap = 1000, preheatGap = 1000, inspectGap = 350, loadInspectGap = 40;
-double abw = 50;
-const double minimalAbw = 50;
-const int n1Global = 60;
-const double minGapGlobal = 40;
-char destIPString[20] = "192.168.5.1";
+int tcpFd = -1, udpFd = -1, destPort = 11106, globalPacketId = 0, noUpdate = 1;
+int repeatNumber = 1, retryNumber = 1, loadNumber = 100, loadSize = 1472, inspectNumber = 100, inspectSize = 1472, preheatNumber = 0;
+double loadRate = 1500, streamGap = 10000, trainGap = 1000, preheatGap = 1000, inspectGap = 350, loadInspectGap = 40;
+double minimalAbw = 50, maximumAbw = 1000, abw = 50;
+int n1Global = 80, n2Global = 20;
+double minGapGlobal = 40, maxGapGlobal = 400, GapGlobal = 300;
+char destIPString[20] = "10.0.7.1";
 sockaddr_in srcAddress, destAddress;
 socklen_t sockLen = sizeof(sockaddr_in);
 signalPacket sigPkt;
 timespec beginTime, currentTime, endTime, tempTime;
 double beginTimeDouble, currentTimeDouble, endTimeDouble, timeDouble, actualRate, tmpDouble;
 timestampPacket tpacketTemp;
+double offsetLoadTime[10000];
+double offsetInspectTime[10000];
+int debugOption = 0;
 static struct option longOptions[] = {
 	{"loadRate",   required_argument, 0, 1},
 	{"loadSize",    required_argument, 0,  2},
@@ -50,8 +50,66 @@ static struct option longOptions[] = {
 	{"port",    required_argument, 0,  15},
 	{"dest",    required_argument, 0,  16},
 	{"noUpdate",required_argument, 0,  17},
+	{"minAbw", required_argument, 0,  18},
+	{"minGap", required_argument, 0,  19},
+	{"maxGap", required_argument, 0,  20},
+	{"debug", required_argument, 0,  21},
+	{"maxAbw", required_argument, 0,  22},
+	{"Gap", required_argument, 0,  23},
+	{"n1", required_argument, 0,  24},
+	{"n2", required_argument, 0,  25},
 	{0,         0,                 0,  0}
 };
+void internalArrange(int byte, double leftAbw, double rightAbw, int npoint, int offset, double minGap, double maxGap, double lastT) {
+	if (npoint <= 0) {
+		return;
+	}
+	double q = 1.0 / npoint;
+	double nextAbw = q * rightAbw + (1.0 - q) * leftAbw;
+	double nextT = byte * 8 / nextAbw * 1e-6;
+	double currentGap = nextT - lastT;
+	if (currentGap <= maxGap && currentGap >= minGap) {
+		offsetInspectTime[offset] = nextT;
+		internalArrange(byte + inspectSize, nextAbw, rightAbw, npoint - 1, offset + 1, minGap, maxGap, nextT);
+	} else if (currentGap > maxGap) {
+		for (int i = 0; i < npoint; i++) {
+			offsetInspectTime[offset + i] = lastT + maxGap * (i + 1);
+		}
+	} else if (currentGap < minGap) {
+		nextT = lastT + minGap;
+		nextAbw = byte * 8 / nextT * 1e-6;
+		offsetInspectTime[offset] = nextT;
+		internalArrange(byte + inspectSize, nextAbw, rightAbw, npoint - 1, offset + 1, minGap, maxGap, nextT);
+	}
+}
+void arrange(double minA, double maxA, double minGap, double maxGap, double Gap, int n1, int n2, int loadNumber, int loadSize, double loadRate, int inspectSize){
+	/*
+		速率单位Mbps，时间单位s，大小单位字节 
+		前n1个点在minGap和maxGap的限制下均分minA和maxA，可超过目标时间，但不会小于目标时间；
+		后n2个点间隔为Gap
+	*/
+	for (int i = 0; i < loadNumber; i++) {
+		offsetLoadTime[i] = loadSize * i * 8 / loadRate * 1e-6;
+	}
+	if (n1 == 0 && n2 == 0) {
+		return;
+	}
+	int loadByte = loadNumber * loadSize;
+	offsetInspectTime[0] = loadByte * 8 / maxA * 1e-6;
+	internalArrange(loadByte + inspectSize, maxA, minA, n1 - 1, 1, minGap, maxGap, offsetInspectTime[0]);
+	for (int i = 0; i < n2; i++) {
+		offsetInspectTime[i + n1] = offsetInspectTime[i + n1 - 1] + Gap;
+	}
+	if (debugOption) {
+		for (int i = 0; i < loadNumber; i++) {
+			printf("%3d: %6.0f\n", i, offsetLoadTime[i] * 1e6);
+		}
+		for (int i = 0; i < n1 + n2; i++) {
+			printf("%3d: %6.0f\n", i, offsetInspectTime[i] * 1e6);
+		}
+	}
+	printf("Duration %.0f\n", (offsetInspectTime[inspectNumber - 1] - offsetLoadTime[0]) * 1e6);
+}
 int parseArgs(int argc, char *argv[]) {
 	int optionIndex = 0, c;
     while ((c = getopt_long(argc, argv, "", longOptions, &optionIndex)) != -1) {
@@ -104,6 +162,30 @@ int parseArgs(int argc, char *argv[]) {
 			case 17:
 				noUpdate = atoi(optarg);
 				break;
+			case 18:
+				minimalAbw = atof(optarg);
+				break;
+			case 19:
+				minGapGlobal = atof(optarg);
+				break;
+			case 20:
+				maxGapGlobal = atof(optarg);
+				break;
+			case 21:
+				debugOption = atoi(optarg);
+				break;
+			case 22:
+				maximumAbw = atof(optarg);
+				break;
+			case 23:
+				GapGlobal = atof(optarg);
+				break;
+			case 24:
+				n1Global = atoi(optarg);
+				break;
+			case 25:
+				n2Global = atoi(optarg);
+				break;
 			default:
 				printf("getopt returned character code 0%o\n", c);
 				break;
@@ -118,7 +200,12 @@ int parseArgs(int argc, char *argv[]) {
 		printf("inspect packet size %d < min %d\n", inspectSize, minSize);
 		inspectSize = minSize;
 	}
-	printf("loadRate %.2f, size %d, number %d, recv ip %s, recv port %d\n", loadRate, loadSize, loadNumber, destIPString, destPort);
+	if (inspectNumber != n1Global + n2Global) {
+		printf("inspectNumber %d <-> n1+n2 %d\n", inspectNumber, n1Global+n2Global);
+		inspectNumber = n1Global + n2Global;
+	}
+	arrange(minimalAbw, maximumAbw, minGapGlobal * 1e-6, maxGapGlobal * 1e-6, GapGlobal * 1e-6, n1Global, n2Global, loadNumber, loadSize, loadRate, inspectSize);
+	printf("loadRate %.2f, recv %s: %d\n", loadRate, destIPString, destPort);
 	printf("-------Parse Arg End---------\n");
     return 0;
 }
@@ -179,10 +266,7 @@ void sendPreheat(){
 	send(udpFd, udpBuffer, inspectSize, 0);
 	timeDouble = beginTimeDouble + preheatGap * 1e-6;
 	int i = 1;
-	while (1) {
-		if (i >= preheatNumber) {
-			break;
-		}
+	while (i < preheatNumber) {
 		clock_gettime(clockToUse, &currentTime);
 		currentTimeDouble = timespec2double(currentTime);
 		if (currentTimeDouble >= timeDouble) {
@@ -204,14 +288,10 @@ void sendLoad(){
 	setTimestampPacket(globalPacketId++, beginTimeDouble, 0);
 	send(udpFd, udpBuffer, loadSize, 0);
 	int i = 1;
-	while (1) {
-		if (i >= loadNumber) {
-			break;
-		}
+	while (i < loadNumber) {
 		clock_gettime(clockToUse, &currentTime);
 		currentTimeDouble = timespec2double(currentTime);
-		actualRate = getRate(i * loadSize, currentTimeDouble - beginTimeDouble);
-		if (actualRate <= loadRate) {
+		if (currentTimeDouble >= offsetLoadTime[i] + beginTimeDouble) {
 			setTimestampPacket(globalPacketId++, currentTimeDouble, 0);
 			send(udpFd, udpBuffer, loadSize, 0);
 			i++;
@@ -219,164 +299,18 @@ void sendLoad(){
 	}
 	endTimeDouble = currentTimeDouble;
 }
-void arrangeTime(double *inspectTime) {
-	/*
-		x = (LN+50) * p / A  ; p=1472*8
-		设从t1开始以G发检查包，t1=max(begin+x-50G,end+g)
-	*/
-	double x = (loadNumber + 50) * 1472 * 8 / abw;
-	double t1 = max(beginTimeDouble + (x - 50 * inspectGap) * 1e-6, endTimeDouble + loadInspectGap * 1e-6);
-	for (int i = 0; i < inspectNumber; i++) {
-		inspectTime[i] = t1 + i * inspectGap * 1e-6;
-	}
-}
-void optimizeTime(double *inspectTime, double minGap, int n) {
-	/*
-		可优化区间为 end+g,inspectTime[n](第n+1个检查包)
-		优化条件 区间长度>(n+1)minGap
-		第1个时间：计算t1,t2对应的可用带宽A1,A2
-		A=n*A1/(n+1)+A2/(n+1)
-		计算t=P1/A
-		如果t-t1<minGap, 则t=t1+minGap
-		第2个时间：
-		计算t1,t2对应A1,A2
-		A=n*A1/(n+1)+A2/(n+1)
-		t=P1/A
-		如果t-t1<minGap,则t=t1+minGap
-	*/
-	double t1, t2;
-	t1 = endTimeDouble + loadInspectGap * 1e-6;
-	t2 = inspectTime[n];
-	int loadBytes = loadSize * loadNumber;
-	if (t2 - t1 > minGap * (n + 1) * 1e-6) {
-		int i = 0, m;
-		double f1, f2, A1, A2, A, t;
-		while (i < n) {
-			m = n - i;
-			f1 = (double)m / (m + 1);
-			f2 = (double)1 / (m + 1);
-			A1 = (loadBytes + i * inspectSize) / (t1 - beginTimeDouble) * 1e-6;
-			A2 = (loadBytes + n * inspectSize) / (t2 - beginTimeDouble) * 1e-6;
-			A = f1 * A1 + f2 * A2;
-			t = beginTimeDouble + (loadBytes + i * inspectSize) / A * 1e-6;
-			if (t - t1 > minGap * 1e-6) {
-				inspectTime[i] = t;
-				A1 = A;
-				for (int j = i + 1; j < n; j++) {
-					f1 = (double)(m - j + i) / m;
-					f2 = (double)(j - i) / m;
-					A = f1 * A1 + f2 * A2; 
-					t = beginTimeDouble + (loadBytes + j * inspectSize) / A * 1e-6;
-					inspectTime[j] = t;
-				}
-				break;
-			} else {
-				t = t1 + minGap * 1e-6;
-				inspectTime[i] = t;
-				t1 = t;
-				i++;
-			}
-		}
-	}
-}
-void arrangeSpecial(double *inspectTime, double minGap, int n1, double abw) {
-	/*
-		第一段 [0,n1-1] 共n1个点，时间(end+loadInspectGap,inspectTime[n1])
-		第二段 [n1,inspectNumber-1] 共inspectNumber-n1个点，时间以x为中心，间隔0.01x
-		(endTime+loadInspectGap,maxTime) 计算带宽A[1],A[100]
-		第i个带宽为A[i]=q*A[1]+(1-q)*A[100]
-		第i个时间为t[i]=P[i]/A[i]
-		如果t[i]-t[i-1]>minGap，
-		如果t[i]-t[i-1]<minGap，则t[i]=t[i-1]+minGap，对(t[i],maxTime)重复以上划分
-	*/
-	inspectTime[0] = endTimeDouble + loadInspectGap * 1e-6;
-	// x 对应的包下标
-	int middle = n1, middleByte;
-	int loadByte = loadSize * loadNumber;
-	double x, tBeforeX;
-	if ((inspectNumber - n1) % 2 == 0) {
-		middle += (inspectNumber - n1) / 2;
-	} else {
-		middle += (inspectNumber - n1) / 2;
-	}
-	middleByte = loadByte + inspectSize * middle;
-	x = middleByte * 8 / abw * 1e-6 + beginTimeDouble;
-	tBeforeX = x - inspectGap * (middle - n1) * 1e-6;
-	if (tBeforeX <= inspectTime[0] || tBeforeX - inspectTime[0] <= n1 * inspectGap * 1e-6) {
-		/* 第一段长度不够 */
-		printf("tBefore %.0f inspectTime[0] %.0f\n", (tBeforeX - beginTimeDouble) * 1e6, (inspectTime[0] - beginTimeDouble) * 1e6);
-		for (int i = 1; i < inspectNumber; i++) {
-			inspectTime[i] = inspectTime[i - 1] + inspectGap * 1e-6;
-		}
-	} else if (tBeforeX - inspectTime[0] > n1 * inspectGap * 1e-6){
-		/* 设置第二段 */
-		for (int i = n1; i < inspectNumber; i++) {
-			inspectTime[i] = x + (i - middle) * inspectGap * 1e-6;
-		}
-		/* 
-			第一段长度足够
-			设置inspectTime[1]-inspectTime[n1-1]成A[0],A[n1]均匀分配的A
-		*/
-		double tleft, aleft, pleft, tright, aright, pright, qleft, qright, an, tn, pn;
-		int n = 1;
-		tright = inspectTime[n1];
-		pright = loadByte + inspectSize * (n1 - 1);
-		aright = pright * 8 / (tright - beginTimeDouble) * 1e-6;
-		while (n < n1) {
-			tleft = inspectTime[n - 1];
-			pleft = loadByte + inspectSize * (n - 1);
-			aleft = pleft * 8 / (tleft - beginTimeDouble) * 1e-6;
-			qright = 1.0 / (n1 - n + 1);
-			qleft = 1.0 - qright;
-			an = qleft * aleft + qright * aright;
-			pn = loadByte + inspectSize * n;
-			tn = pn * 8 / an * 1e-6 + beginTimeDouble;
-			if (tn - tleft >= minGap * 1e-6) {
-				for (int i = n; i < n1; i++) {
-					qright = (i - n + 1.0) / (n1 - n + 1);
-					qleft = 1.0 - qright;
-					an = qleft * aleft + qright * aright;
-					pn = loadByte + inspectSize * i;
-					tn = pn * 8 / an * 1e-6 + beginTimeDouble;
-					inspectTime[i] = tn;
-				}
-				break;
-			} else {
-				inspectTime[n] = tleft + minGap * 1e-6;
-				n++;
-			}
-		}
-	}
-}
 void sendInspect(){
-	/* 
-		inspectNumber
-		包间隔为inspectGap
-		根据给定的A,G，计算开始发送检查包的时间 begin=(loadNumber+0.5*inspectNumber)/A-0.5*inspectNumber*G
-		begin=max(begin,endtime)
-		将(endTime+loadInspectGap,x)分成两段，第一段带宽均匀，第二段间隔均匀
-	*/
 	if (inspectNumber <= 0) {
 		return;
 	}
-	tmpDouble = inspectGap * 1e-6;
-	double inspectTime[inspectNumber];
-	arrangeSpecial(inspectTime, minGapGlobal, n1Global, abw);
-	int i = 0;
-	while (1) {
-		if (i >= inspectNumber) {
-			break;
-		}
+	for (int i = 0; i < inspectNumber;) {
 		clock_gettime(clockToUse, &currentTime);
 		currentTimeDouble = timespec2double(currentTime);
-		if (currentTimeDouble >= inspectTime[i]) {
+		if (currentTimeDouble >= offsetInspectTime[i] + beginTimeDouble) {
 			setTimestampPacket(globalPacketId++, currentTimeDouble, 0);
 			send(udpFd, udpBuffer, inspectSize, 0);
 			i++;
 		}
-	}
-	for (int i = 0; i < inspectNumber; i++) {
-		printf("%d: %0f\n", i, (inspectTime[i] - beginTimeDouble) * 1e6);
 	}
 }
 void smartSleep(double t) {
@@ -402,16 +336,13 @@ void mainSend(){
 	/*
 		repeatNumber streams separated by streamGap
 		<=retryNumber trains controlled by receiver signal
-
 		one train:
 			(loadNumber,loadSize) packet at loadRate, end at time END
 			(inspectNumber,inspectSize) packet evenly spaced between (END,duration)
-		
 		signals by receiver:
 			1. next stream
 			2. next retry followed by new duration parameter
-			3. retransmit train with same parameter
-		
+			3. retransmit train with same parameter		
 	*/
 	int signal;
 	while (1) {
@@ -420,27 +351,10 @@ void mainSend(){
 			sendPreheat();
 			continue;
 		} else if (signal == ctrlSignal::firstTrain) {
-			printf("LN %d ABW %.0f G %.0f\n", sigPkt.loadNumber, sigPkt.abw, sigPkt.inspectGap);
-			if (!noUpdate) {
-				abw = sigPkt.abw;
-				loadNumber = sigPkt.loadNumber;
-				inspectGap = sigPkt.inspectGap;
-			}
+			;
 		} else if (signal == ctrlSignal::nextTrain) {
-			printf("LN %d ABW %.0f G %.0f\n", sigPkt.loadNumber, sigPkt.abw, sigPkt.inspectGap);
-			if (!noUpdate) {
-				loadNumber = sigPkt.loadNumber;
-				abw = sigPkt.abw;
-				inspectGap = sigPkt.inspectGap;
-			}
 			smartSleep(trainGap);
 		} else if (signal == ctrlSignal::nextStream) {
-			printf("LN %d ABW %.0f G %.0f\n", sigPkt.loadNumber, sigPkt.abw, sigPkt.inspectGap);
-			if (!noUpdate) {
-				loadNumber = sigPkt.loadNumber;
-				abw = sigPkt.abw;
-				inspectGap = sigPkt.inspectGap;
-			}
 			smartSleep(streamGap);
 		} else if (signal == ctrlSignal::retransmit) {
 			smartSleep(trainGap);

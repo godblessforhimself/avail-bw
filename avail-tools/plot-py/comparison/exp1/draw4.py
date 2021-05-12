@@ -58,6 +58,14 @@ def getTime(gap):
 		ret.append(temp)
 		retMean.append(tempMean)
 	return ret,retMean
+
+def pickColor(i,n):
+	cmap=plt.cm.get_cmap('Set1',n)
+	color=cmap(i/(n-1))
+	return color
+color=[pickColor(i, 10) for i in range(10)]
+plt.rcParams.update({'font.size': 15})
+
 if __name__=='__main__':
 	begin=time.time()
 	if os.path.exists(cacheFilename):
@@ -83,4 +91,34 @@ if __name__=='__main__':
 	index=['{:d}-{:d}-{:d}({:.0f})'.format(x[i],y[i],z[i],truth[i]) for i in range(N)]
 	df=pd.DataFrame(mmT,index=index,columns=label)
 	df.to_csv('/data/comparison/exp1-time/exp1-time.csv',float_format='%.2f')
-	code.interact(local=dict(globals(),**locals()))
+	mmT=np.array(mmT)
+	fig,(ax1,ax2)=plt.subplots(2,1,sharex=True,figsize=(10,10))
+	l2=mmT.shape[1]
+	xtick=np.arange(0,25,5)
+	width=2
+	lines=[]
+	for i in range(2):
+		xpos=xtick+i*width
+		line=ax1.bar(xpos,mmT[1:10:2,i]/1000,width=width,label=label[i],color=color[i])
+		lines.append(line)
+		line=ax2.bar(xpos,mmT[1:10:2,i+2]/1000/1000,width=width,label=label[i+2],color=color[i+2])
+		lines.append(line)
+	xindex=['{}-{}-{}'.format(x[i],y[i],z[i]) for i in range(1,10,2)]
+	ax1.spines['right'].set_visible(False)
+	ax2.spines['top'].set_visible(False)
+	ax2.spines['right'].set_visible(False)
+	ax1.grid(axis='both',linestyle="--")
+	ax2.grid(axis='both',linestyle="--")
+	ax2.set_xlabel('Traffic Settings(Mbps)')
+	ax1.set_ylabel('Time(ms)')
+	ax2.set_ylabel('Time(s)')
+	ax1.xaxis.tick_top()
+	ax1.tick_params(labeltop='off')
+	ax2.set_ylim(0,6)
+	ax2.set_yticks(np.arange(1,6))
+	ax2.invert_yaxis()
+	plt.xticks(xtick+0.5*width,xindex)
+	plt.subplots_adjust(wspace=0,hspace=0)
+	ax1.legend(lines,label)
+	plt.savefig('/images/comparison/exp1/exp1-RealTime.eps',bbox_inches='tight')
+	plt.savefig('/images/comparison/exp1/exp1-RealTime.pdf',bbox_inches='tight')

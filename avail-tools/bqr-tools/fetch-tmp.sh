@@ -1,1 +1,1 @@
-mkdir -p /tmp/bqr && rsync -avz -e "ssh -p 18743" ubuntu5@39.108.129.28:/tmp/bqr/timestamp.txt /tmp/bqr 1>/dev/null
+mkdir -p /tmp/bqr && rsync -avz ubuntu5@192.168.66.20:/tmp/bqr/timestamp.txt /tmp/bqr 1>/dev/null

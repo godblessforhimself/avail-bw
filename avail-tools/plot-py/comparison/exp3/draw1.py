@@ -28,12 +28,10 @@ if __name__=='__main__':
 	# 获取ground truth
 	truth=[min(Capacity1-x[i],Capacity1-z[i],Capacity2-y[i]) for i in range(N)]
 	truth=np.array(truth)
+	settings=['{}-{}-{}'.format(x[i],y[i],z[i]) for i in range(N)]
 	# 柱状图显示绝对误差
 	fig=plt.figure(figsize=(10,10),dpi=100)
 	absError=np.abs(abw-truth[:,np.newaxis])
-	for i in range(N):
-		for j in range(M):
-			absError[i,j]=np.mean(absError[i,j])
 	absError=absError.astype(dtype=np.float)
 	location=np.arange(N)
 	width=1/(M+1)
@@ -43,7 +41,7 @@ if __name__=='__main__':
 		item=absError[:,j]
 		plt.bar(location+j*width,item,color=color[j],width=width,label=label[j])
 	plt.legend()
-	plt.xticks(location+0.5*M*width,['{}-{}-{}'.format(x[i],y[i],z[i]) for i in range(N)],rotation=0)
+	plt.xticks(location+0.5*M*width,settings,rotation=0)
 	plt.savefig('/images/comparison/exp3/absError.png',bbox_inches='tight')
 	plt.close()
 	# 柱状图显示预测值
@@ -63,7 +61,17 @@ if __name__=='__main__':
 	plt.legend()
 	plt.xticks(location+0.5*M*width-0.5*width,['{}-{}-{}'.format(x[i],y[i],z[i]) for i in range(N)],rotation=0)
 	plt.savefig('/images/comparison/exp3/abw.png',bbox_inches='tight')
-	plt.close()
+	plt.close(fig)
+	# AbsPerror
+	AbsPerror=absError/truth[:,np.newaxis]
+	print(AbsPerror)
+	# [0,0,0]-[0,40,0] + [400,0,400]-[400,40,400]
+	x1,x2=[7,8,9],[10,11,12]
+	fig=plt.figure(figsize=(10,10))
+	for j in range(M):
+		plt.plot(AbsPerror[x1,j]*100,label='{:d}'.format(j))
+		plt.plot(AbsPerror[x2,j]*100,label='{:d}'.format(j))
+	plt.show()
 	index=['{:d}-{:d}-{:d}({:.0f})'.format(x[i],y[i],z[i],truth[i]) for i in range(N)]
 	df=pd.DataFrame(abwMean,index=index,columns=label)
 	df.to_csv('/data/comparison/exp3-csv/exp3-abw.csv',float_format='%.2f')

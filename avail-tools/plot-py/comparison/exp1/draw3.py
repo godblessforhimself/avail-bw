@@ -68,6 +68,8 @@ def igiSec(g):
 	return universalSec(g,250,50,'igi')
 def pathloadSec(g):
 	return universalSec(g,1e3,6,'pathload')
+def spruceSec(g):
+	return universalSec(g,1e6,0,'spruce')
 def sec2Number(sec):
 	return len(sec)
 def sec2PacketNumber(sec):
@@ -99,8 +101,6 @@ def queueLength2queueMean(sections,queueLength):
 		temp1=[]
 		for j in range(M):
 			temp2=[]
-			if methods[j]=='spruce':
-				continue
 			sectionNumber=len(sections[i][j])
 			for k in range(sectionNumber):
 				totalTime=np.sum(sections[i][j][k])
@@ -124,7 +124,7 @@ def getSections(gap,truth):
 	queueLength=[]
 	queueMax=[]
 	queueMean=[]
-	secFun=[bqrSec,assoloSec,igiSec,pathloadSec]
+	secFun=[bqrSec,assoloSec,igiSec,pathloadSec,spruceSec]
 	for i in range(N):
 		section_=[]
 		sectionNumber_=[]
@@ -135,8 +135,6 @@ def getSections(gap,truth):
 		queueMax_=[]
 		queueMean_=[]
 		for j in range(M):
-			if methods[j]=='spruce':
-				continue
 			g=gap[i,j]
 			sec=secFun[j](g)
 			section_.append(sec)
@@ -157,6 +155,13 @@ def getSections(gap,truth):
 		queueMax.append(queueMax_)
 		queueMean.append(queueMean_)
 	return sections,sectionNumber,packetNumber,sectionTime,sectionRate,queueLength,queueMax,queueMean
+
+def pickColor(i,n):
+	cmap=plt.cm.get_cmap('Set1',n)
+	color=cmap(i/(n-1))
+	return color
+color=[pickColor(i, 10) for i in range(10)]
+plt.rcParams.update({'font.size': 15})
 
 if __name__=='__main__':
 	begin=time.time()
@@ -195,13 +200,11 @@ if __name__=='__main__':
 	end=time.time()
 	print('{:.2f}'.format(end-begin))
 	begin=time.time()
-	# 平均一次测量段数 sectionNumber (13,4)
+	# 平均一次测量段数 sectionNumber (13,5)
 	measurementNumber=[]
 	for i in range(N):
 		temp=[]
 		for j in range(M):
-			if methods[j]=='spruce':
-				continue
 			prefix=dirname.format(x[i],y[i],z[i],methods[j])			
 			abwfile='{}/abw'.format(prefix)
 			measureNumber=len(np.loadtxt(abwfile))
@@ -211,17 +214,16 @@ if __name__=='__main__':
 	sectionNumber=np.array(sectionNumber)
 	averageSecNum=sectionNumber/measurementNumber
 	averageSecNum[:,1]=1
-	label=['BQR','ASSOLO','PTR','pathload']
+	label=['BQR','ASSOLO','PTR','pathload','Spruce']
 	index=['{:d}-{:d}-{:d}({:.0f})'.format(x[i],y[i],z[i],truth[i]) for i in range(N)]
 	df=pd.DataFrame(averageSecNum,index=index,columns=label)
+	df.index.name='Traffic Settings(Mbps)'
 	df.to_csv('/data/comparison/exp1-time/exp1-sectionNumber.csv',float_format='%.2f')
 	# 平均每段测量时间 sectionTime (13,4,sec)
 	avgSecTime=[]
 	for i in range(N):
 		temp=[]
 		for j in range(M):
-			if methods[j]=='spruce':
-				continue
 			temp.append(np.mean(sectionTime[i][j]))
 		avgSecTime.append(temp)
 	avgSecTime=np.array(avgSecTime)
@@ -236,8 +238,6 @@ if __name__=='__main__':
 	for i in range(N):
 		temp=[]
 		for j in range(M):
-			if methods[j]=='spruce':
-				continue
 			temp.append(np.mean(sectionRate[i][j]))
 		meanSecRate.append(temp)
 	df=pd.DataFrame(meanSecRate,index=index,columns=label)
@@ -247,8 +247,6 @@ if __name__=='__main__':
 	for i in range(N):
 		temp=[]
 		for j in range(M):
-			if methods[j]=='spruce':
-				continue
 			temp.append(np.max(sectionRate[i][j]))
 		maxSecRate.append(temp)
 	df=pd.DataFrame(maxSecRate,index=index,columns=label)
@@ -258,8 +256,6 @@ if __name__=='__main__':
 	for i in range(N):
 		temp=[]
 		for j in range(M):
-			if methods[j]=='spruce':
-				continue
 			temp.append(np.mean(packetNumber[i][j]))
 		meanSecPacketNumber.append(temp)
 	df=pd.DataFrame(meanSecPacketNumber,index=index,columns=label)
@@ -274,8 +270,6 @@ if __name__=='__main__':
 	for i in range(N):
 		temp=[]
 		for j in range(M):
-			if methods[j]=='spruce':
-				continue
 			temp.append(np.mean(queueMean2[i][j]))
 		meanQueueLength.append(temp)
 	df=pd.DataFrame(meanQueueLength,index=index,columns=label)
@@ -285,12 +279,62 @@ if __name__=='__main__':
 	for i in range(N):
 		temp=[]
 		for j in range(M):
-			if methods[j]=='spruce':
-				continue
 			temp.append(np.max(queueMax[i][j]))
 		maxQueueLength.append(temp)
 	df=pd.DataFrame(maxQueueLength,index=index,columns=label)
 	df.to_csv('/data/comparison/exp1-time/exp1-maxQueueLength.csv',float_format='%.2f')
 	end=time.time()
 	print('{:.2f}'.format(end-begin))
-	code.interact(local=dict(globals(),**locals()))
+	# 以可用带宽为横坐标，平均/最大长度为纵坐标的折线图；可用带宽为大、中、小时的包数、字节数表格
+	fig=plt.figure(figsize=(10,10))
+	N=len(rates)
+	meanQueueLength=np.array(meanQueueLength)
+	marker=['.','o','v','^','<','>']
+	for j in range(M):
+		plt.plot(truth[:N],meanQueueLength[:N,j],label=label[j],color=color[j],marker=marker[j])
+	plt.legend()
+	plt.grid(axis='both',linestyle="--")
+	plt.xticks(np.arange(0,1000,100))
+	plt.xlabel('ABW(Mbps)')
+	plt.ylabel('Mean Queue Length(number of MTU packets)')
+	ax=plt.gca()
+	ax.spines['top'].set_visible(False)
+	ax.spines['right'].set_visible(False)
+	plt.savefig('/images/comparison/exp1/exp1-MeanQueueLength.pdf',bbox_inches='tight')
+	plt.savefig('/images/comparison/exp1/exp1-MeanQueueLength.eps',bbox_inches='tight')
+	plt.close(fig)
+	# Max queue length
+	fig=plt.figure(figsize=(10,10))
+	N=len(rates)
+	maxQueueLength=np.array(maxQueueLength)
+	marker=['.','o','v','^','<','>']
+	for j in range(M):
+		plt.plot(truth[:N],maxQueueLength[:N,j],label=label[j],color=color[j],marker=marker[j])
+	plt.legend()
+	plt.grid(axis='both',linestyle="--")
+	plt.xticks(np.arange(0,1000,100))
+	plt.xlabel('ABW(Mbps)')
+	plt.ylabel('Max Queue Length(number of MTU packets)')
+	ax=plt.gca()
+	ax.spines['top'].set_visible(False)
+	ax.spines['right'].set_visible(False)
+	plt.savefig('/images/comparison/exp1/exp1-MaxQueueLength.pdf',bbox_inches='tight')
+	plt.savefig('/images/comparison/exp1/exp1-MaxQueueLength.eps',bbox_inches='tight')
+	plt.close(fig)
+	# 可用带宽为957/557/57时的MaxQueueLength和MaxQueueMB
+	ABWIndex=[1,4,9]
+	index=[]
+	arr=[]
+	for j in range(M):
+		for _,i in enumerate(ABWIndex):
+			arr.append([])
+			name='{:s}(ABW:{:.0f}Mbps)'.format(label[j],truth[i])
+			index.append(name)
+			value=maxQueueLength[i,j]
+			arr[-1].append(value)
+			arr[-1].append(value*1500/1024)
+	arr=np.array(arr)
+	df=pd.DataFrame(arr,index=index,columns=['Number of MTU Packets', 'KByte'])
+	df.index.name='Method(ABW)'
+	df.to_csv('/data/comparison/exp1-csv/exp1-MaxQueueLength.csv',float_format='%.2f')
+	#code.interact(local=dict(globals(),**locals()))

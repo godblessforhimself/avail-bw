@@ -1,17 +1,27 @@
 #### 常用命令
-1. **将本项目复制到探测源**
-scp -r . liqing@10.10.114.19:~
-2. 安装tmux
+1. 安装tmux
 sudo apt install tmux
 git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm
 https://github.com/tmux-plugins/tpm
 vi ~/.tmux.conf
+-----
 set -g mouse on
 set -g @plugin 'tmux-plugins/tmux-yank'
 set -g @plugin 'tmux-plugins/tmux-resurrect'
-set-window-option -g mode-keys vi
-set -g @yank_selection 'primary'
+set -g @plugin 'tmux-plugins/tpm'
 set -g @shell_mode 'vi'
+set -g @yank_action 'copy-pipe-no-clear'
+bind -T copy-mode    DoubleClick1Pane select-pane \; send -X select-word \; send -X copy-pipe-no-clear "xsel -i"
+bind -T copy-mode-vi DoubleClick1Pane select-pane \; send -X select-word \; send -X copy-pipe-no-clear "xsel -i"
+bind -n DoubleClick1Pane select-pane \; copy-mode -M \; send -X select-word \; send -X copy-pipe-no-clear "xsel -i"
+bind -T copy-mode    TripleClick1Pane select-pane \; send -X select-line \; send -X copy-pipe-no-clear "xsel -i"
+bind -T copy-mode-vi TripleClick1Pane select-pane \; send -X select-line \; send -X copy-pipe-no-clear "xsel -i"
+bind -n TripleClick1Pane select-pane \; copy-mode -M \; send -X select-line \; send -X copy-pipe-no-clear "xsel -i"
+bind -n MouseDown2Pane run "tmux set-buffer -b primary_selection \"$(xsel -o)\"; tmux paste-buffer -b primary_selection; tmux delete-buffer -b primary_selection"
+bind -T copy-mode    C-c send -X copy-pipe-no-clear "xsel -i --clipboard"
+bind -T copy-mode-vi C-c send -X copy-pipe-no-clear "xsel -i --clipboard"
+run '~/.tmux/plugins/tpm/tpm'
+----
 source ~/.tmux.conf
 * ubuntu apt
 更换Tsinghua源 https://mirror.tuna.tsinghua.edu.cn/help/ubuntu/
@@ -49,6 +59,8 @@ sudo ip link set dev enp61s0f1 mtu 9702
 * 测试路径MTU
 ping -c 3 -s 4972 -M do 192.168.1.21
 * 修改socket buffer
+* /proc/sys/net/core/rmem_default
+* /proc/sys/net/core/wmem_default
 sudo vi /etc/sysctl.conf
 net.core.rmem_default=16777216
 net.core.wmem_default=16777216
@@ -67,7 +79,6 @@ sudo tc qdisc del dev vlan1 root; sudo tc qdisc add dev vlan1 root tbf rate 100m
 * ssh 代理 jupyter
 ssh -N -L 8080:localhost:8080 <remote_user>@<remote_host>
 * dagconvert
-  
 sudo dagconvert -T erf:pcap -i traffic.erf -b "src host 192.168.2.4 and dst host 192.168.5.1 and udp" -f c -o in.pcap
 * 显示网卡速率
 sudo ethtool enp27s0f0
@@ -89,55 +100,31 @@ sudo dagconfig -d0 --portd nonic
 sudo dagconfig -d0 --portd nic
 
 #### 检测DAG是否正常
-```
 sudo dagdetect -v
-```
 #### 加载DAG驱动
-```
 sudo dagload
-```
 #### dag抓包
-```
 sudo dagsnap -d0 -s 5 -o tf.erf
-```
-
 #### dag导出pcap
-```
 sudo dagconvert -T erf:pcap -i tf.erf -f d -o tf.pcap
-```
-
 #### tcpdump查看
-```
 sudo tcpdump -nN -r tf.pcap | less
-```
 #### tcpdump添加-e查看mac地址
-```
 sudo tcpdump -i eth1 -e
-```
 #### tcpdump 捕捉以太网地址
-```
 sudo tcpdump -nN -e -c 10 -i enp96s0f1 "ether host 02:00:00:00:00:00"
-```
 #### 禁用IPv6
-``` 
   sudo vi /etc/sysctl.conf
   net.ipv6.conf.all.disable_ipv6=1
   net.ipv6.conf.default.disable_ipv6=1
   net.ipv6.conf.lo.disable_ipv6=1
-```
 
 #### 开启、关闭网卡
-```
 ip link set eth1 up/down
-```
 
 #### 检查当前是否ip转发
-```
 sudo cat /proc/sys/net/ipv4/ip_forward
-```
 
 #### 删除网卡IP
-```
 ip addr del 10.22.30.44/16 dev eth0
 ip addr flush dev eth0
-```

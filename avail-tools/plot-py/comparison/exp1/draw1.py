@@ -5,6 +5,7 @@
 # BQR assolo igi pathload spruce
 import numpy as np
 import pandas as pd
+import matplotlib
 import matplotlib.pyplot as plt
 import code
 import scipy.stats
@@ -28,6 +29,14 @@ N=len(x)
 M=len(methods)
 Capacity=957.14
 Discard=10
+def pickColor(i,n):
+	cmap=plt.cm.get_cmap('Set1',n)
+	color=cmap(i/(n-1))
+	return color
+color=[pickColor(i, 10) for i in range(10)]
+matplotlib.rcParams['font.family']='sans-serif'
+matplotlib.rcParams['font.sans-serif']='Arial'
+plt.rcParams.update({'font.size': 15})
 if __name__=='__main__':
 	abw=[]
 	for i in range(N):
@@ -47,15 +56,17 @@ if __name__=='__main__':
 	for i in range(N):
 		truth.append(Capacity-max(x[i],y[i],z[i]))
 	truth=np.array(truth)
-	# 均值；误差；百分误差；使用柱状图显示
+	# 横坐标：背景流量
+	# 纵坐标：AbsError
 	err=abw-truth[:,np.newaxis,np.newaxis]
 	meanError=np.mean(err,axis=2)
 	absError=np.mean(np.abs(err),axis=2)
-	fig=plt.figure(figsize=(20,5),dpi=100)
+
+	fig=plt.figure(figsize=(10,10))
 	location=np.arange(0,5*N,5)
 	width=3/M
-	color=['red','orange','green','blue','black']
-	label=['BQR','ASSOLO','PTR','pathload','spruce']
+
+	label=['BQR','ASSOLO','PTR','pathload','Spruce']
 	for j in range(M):
 		item=absError[:,j]
 		plt.bar(location+j*width,item,color=color[j],width=width,label=label[j])
@@ -64,11 +75,37 @@ if __name__=='__main__':
 	plt.legend()
 	title='Absolute Error Comparison'
 	plt.title(title)
-	plt.xlabel('traffic settings(Mbps)')
-	plt.ylabel('absolute error(Mbps)')
-	plt.savefig('/images/comparison/exp1/abserr.png',bbox_inches='tight')
+	plt.xlabel('Traffic Settings(Mbps)')
+	plt.ylabel('Absolute Error(Mbps)')
+	plt.savefig('/images/comparison/exp1/exp1-AbsError.pdf',bbox_inches='tight')
+	plt.savefig('/images/comparison/exp1/exp1-AbsError.eps',bbox_inches='tight')
 	plt.close(fig)
-	# 误差、预测值、绝对误差
+
+	# 横坐标：背景流量
+	# 纵坐标：AbsPerror
+	perror=np.abs(abw-truth[:,np.newaxis,np.newaxis])/truth[:,np.newaxis,np.newaxis]
+	absPerror_0=np.mean(perror,axis=2)
+	me,yerr=mean_confidence_interval(perror,0.95)
+	absPerror=absPerror_0[1:9+1:2,:]
+	location=np.arange(0,5*len(absPerror),5)
+	fig=plt.figure(figsize=(10,10))
+	for j in range(M):
+		plt.bar(location+j*width,me[1:9+1:2,j]*100,width=width,label=label[j],color=color[j])
+	bqrMax=np.max(absPerror[:,0])
+	ax=plt.gca()
+	ax.spines['top'].set_visible(False)
+	ax.spines['right'].set_visible(False)
+	plt.text(0.3,0.95,'BQR\'s Max Error is {:.2%}'.format(bqrMax),transform=ax.transAxes)
+	plt.xticks(location+0.5*M*width,['{}-{}-{}'.format(x[i],y[i],z[i]) for i in range(1,9+1,2)],rotation=0)
+	plt.legend()
+	plt.grid(axis='y',linestyle="--")
+	plt.xlabel('Traffic Settings(Mbps)')
+	plt.ylabel('Absolute Percentage Error(%)')
+	plt.savefig('/images/comparison/exp1/exp1-AbsPerror.pdf',bbox_inches='tight')
+	plt.savefig('/images/comparison/exp1/exp1-AbsPerror.eps',bbox_inches='tight')
+	plt.close(fig)
+
+	# csv
 	index=['{:d}-{:d}-{:d}({:.0f})'.format(x[i],y[i],z[i],truth[i]) for i in range(N)]
 	df=pd.DataFrame(meanError,index=index,columns=label)
 	df.to_csv('/data/comparison/exp1-csv/exp1-error.csv',float_format='%.2f')
@@ -76,23 +113,6 @@ if __name__=='__main__':
 	df.to_csv('/data/comparison/exp1-csv/exp1-abw.csv',float_format='%.2f')
 	df=pd.DataFrame(absError,index=index,columns=label)
 	df.to_csv('/data/comparison/exp1-csv/exp1-absError.csv',float_format='%.2f')
-	# 绝对百分比误差的对数值
-	perror=np.abs(abw-truth[:,np.newaxis,np.newaxis])/truth[:,np.newaxis,np.newaxis]
-	absPerror_0=np.mean(perror,axis=2)
-	me,yerr=mean_confidence_interval(perror,0.95)
-	absPerror=absPerror_0[1:9+1:2,:]
-	location=np.arange(0,5*len(absPerror),5)
-	fig=plt.figure(figsize=(10,5),dpi=300)
-	for j in range(M):
-		plt.bar(location+j*width,me[1:9+1:2,j]*100,width=width,label=label[j])
-	bqrMax=np.max(absPerror[:,0])*100
-	plt.text(0.3,0.95,'BQR outperforms others with a maximum error of {:.2f}%'.format(bqrMax),transform=plt.gca().transAxes)
-	plt.xticks(location+0.5*M*width,['{}-{}-{}'.format(x[i],y[i],z[i]) for i in range(1,9+1,2)],rotation=25)
-	plt.legend()
-	plt.title('absolute percentage error of BQR')
-	plt.xlabel('traffic setting(Mbps)')
-	plt.ylabel('absolute percentage error(%)')
-	plt.savefig('/images/comparison/exp1/exp1-absPerror.png',bbox_inches='tight')
 	df=pd.DataFrame(absPerror_0*100,index=index,columns=label)
 	df.to_csv('/data/comparison/exp1-csv/exp1-absPerror.csv',float_format='%.2f')
 	#code.interact(local=dict(globals(),**locals()))
