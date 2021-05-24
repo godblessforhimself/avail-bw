@@ -19,7 +19,7 @@ stopIperf(){
 setBQR(){
 	echo "setBQR $1"
 	ssh ubuntu5@192.168.66.20 "pkill recv-main; nohup /home/ubuntu5/abw-project/avail-tools/bqr/send-recv-module/build/recv-main --timestamp /tmp/bqr/timestamp.txt --result /tmp/bqr/result.txt --log /tmp/bqr/log.txt --polling 1 --busy-poll -1 --once --thres1 100 --thres2 40 --thres3 20 1>/tmp/bqr/rx.log 2>&1 &"
-	ssh ubuntu1@192.168.66.16 "pkill send-main; nohup /home/ubuntu1/abw-project/avail-tools/bqr/send-recv-module/build/send-main --loadRate 9500 --loadSize 8972 --inspectSize 8972 --loadNumber $1 --inspectNumber 30 --repeatNumber 10 --streamGap 10000 --dest 10.1.7.1 --minAbw 800 --maxAbw 6000 --minGap 80 --maxGap 100000 --Gap 800 --n1 20 --n2 10 1>/tmp/bqr/tx.log 2>&1 &"
+	ssh ubuntu1@192.168.66.16 "pkill send-main; nohup /home/ubuntu1/abw-project/avail-tools/bqr/send-recv-module/build/send-main --loadRate 9200 --loadSize 8972 --inspectSize 8972 --loadNumber $1 --inspectNumber 30 --repeatNumber 10 --streamGap 10000 --dest 10.1.7.1 --minAbw 2000 --maxAbw 8000 --minGap 100 --maxGap 100000 --Gap 800 --n1 20 --n2 10 1>/tmp/bqr/tx.log 2>&1 &"
 }
 stop(){
 	echo "stop ${1}s"

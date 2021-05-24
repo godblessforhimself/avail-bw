@@ -36,7 +36,13 @@ def pickColor(i,n):
 color=[pickColor(i, 10) for i in range(10)]
 matplotlib.rcParams['font.family']='sans-serif'
 matplotlib.rcParams['font.sans-serif']='Arial'
-plt.rcParams.update({'font.size': 15})
+matplotlib.rcParams['hatch.linewidth']=0.3
+plt.rcParams.update({'font.size':7})
+marker=['d','.','*','<','p'] #5
+linestyle=[(0,(1,1)),'solid',(0,(5,1)),(0,(3,1,1,1))] #4
+hatch=['/','\\','x','o','-|'] #5
+imgDir='/home/tony/Files/available_bandwidth/thesis-svn/IMC2021/BurstQueueRecovery-jintao/images'
+
 if __name__=='__main__':
 	abw=[]
 	for i in range(N):
@@ -62,14 +68,13 @@ if __name__=='__main__':
 	meanError=np.mean(err,axis=2)
 	absError=np.mean(np.abs(err),axis=2)
 
-	fig=plt.figure(figsize=(10,10))
+	fig=plt.figure(figsize=(3.4,1.1))
 	location=np.arange(0,5*N,5)
 	width=3/M
-
 	label=['BQR','ASSOLO','PTR','pathload','Spruce']
 	for j in range(M):
 		item=absError[:,j]
-		plt.bar(location+j*width,item,color=color[j],width=width,label=label[j])
+		plt.bar(location+j*width,item,color=color[j],width=width,label=label[j],hatch=hatch[j])
 	plt.ylim(0,250)
 	plt.xticks(location+0.5*M*width,['{}-{}-{}'.format(x[i],y[i],z[i]) for i in range(N)],rotation=25)
 	plt.legend()
@@ -77,8 +82,6 @@ if __name__=='__main__':
 	plt.title(title)
 	plt.xlabel('Traffic Settings(Mbps)')
 	plt.ylabel('Absolute Error(Mbps)')
-	plt.savefig('/images/comparison/exp1/exp1-AbsError.pdf',bbox_inches='tight')
-	plt.savefig('/images/comparison/exp1/exp1-AbsError.eps',bbox_inches='tight')
 	plt.close(fig)
 
 	# 横坐标：背景流量
@@ -88,21 +91,22 @@ if __name__=='__main__':
 	me,yerr=mean_confidence_interval(perror,0.95)
 	absPerror=absPerror_0[1:9+1:2,:]
 	location=np.arange(0,5*len(absPerror),5)
-	fig=plt.figure(figsize=(10,10))
+	fig=plt.figure(figsize=(3.4,1.1))
 	for j in range(M):
-		plt.bar(location+j*width,me[1:9+1:2,j]*100,width=width,label=label[j],color=color[j])
+		plt.bar(location+j*width,me[1:9+1:2,j]*100+10,bottom=-10,width=width,label=label[j],edgecolor=color[j],hatch=hatch[j]*5,fill=False,linewidth=.5)
 	bqrMax=np.max(absPerror[:,0])
+	#plt.text(0.3,0.95,'BQR\'s Max Error is {:.2%}'.format(bqrMax),transform=ax.transAxes)
+	#plt.xticks(location+0.5*M*width,['{}-{}-{}'.format(x[i],y[i],z[i]) for i in range(1,9+1,2)],rotation=0)
+	plt.xticks(location+0.5*(M-1)*width,['{}'.format(x[i]) for i in range(1,9+1,2)],rotation=0)
 	ax=plt.gca()
-	ax.spines['top'].set_visible(False)
-	ax.spines['right'].set_visible(False)
-	plt.text(0.3,0.95,'BQR\'s Max Error is {:.2%}'.format(bqrMax),transform=ax.transAxes)
-	plt.xticks(location+0.5*M*width,['{}-{}-{}'.format(x[i],y[i],z[i]) for i in range(1,9+1,2)],rotation=0)
-	plt.legend()
-	plt.grid(axis='y',linestyle="--")
-	plt.xlabel('Traffic Settings(Mbps)')
-	plt.ylabel('Absolute Percentage Error(%)')
-	plt.savefig('/images/comparison/exp1/exp1-AbsPerror.pdf',bbox_inches='tight')
-	plt.savefig('/images/comparison/exp1/exp1-AbsPerror.eps',bbox_inches='tight')
+	ax.tick_params('both',length=2,width=1,which='major',pad=1)
+	plt.legend(loc='upper center',framealpha=.5,ncol=5,labelspacing=0,columnspacing=0.5,handletextpad=0.25,fontsize=6)
+	plt.grid(axis='both',linestyle=(0,(1,1)),linewidth=.1)
+	plt.xlabel('Traffic Settings(Mbps)',labelpad=0)
+	plt.ylabel('Absolute Percentage Error(%)',labelpad=0)
+	plt.savefig('{:s}/exp1-AbsPerror.pdf'.format(imgDir),bbox_inches='tight')
+	plt.savefig('{:s}/exp1-AbsPerror.eps'.format(imgDir),bbox_inches='tight')
+	plt.show()
 	plt.close(fig)
 
 	# csv

@@ -24,7 +24,6 @@ node2向node5使用tcpreplay发送流量，不运行测量
 ##### exp7
 tcpreplay发送多组流量，进行多组测试
 
-
 #### exp8
 draw1.py ASSOLO测量tcpreplay流量效果
 
@@ -37,3 +36,4 @@ draw1.py BQR在万兆网络中，iperf3作背景流量的测量情况
 
 #### exp11
 draw1.py BQR在千兆网络中tcpreplay播放bigFlows和caida流量的测量
+draw2.py 增加时长到90秒。

@@ -1,6 +1,6 @@
 # 实验7 tcpreplay BQR 效果
 import numpy as np
-import code,io,time,os
+import code,io,time,os,matplotlib
 import matplotlib.pyplot as plt
 import pandas as pd
 delta=lambda x: x[...,1:,0]-x[...,:-1,0]
@@ -49,15 +49,30 @@ def plot(owd,i):
 def savePlot(owd,i,path):
 	v=owd[i]
 	for idx,j in enumerate(v):
-		plt.plot(j)
-		plt.xlabel('packet index')
-		plt.ylabel('one way delay(us)')
-		plt.title('one way delay of BQR')
-		plt.text(0.5,0.05,'rate {:d}, iteration {:d}'.format(i,idx))
-		plt.savefig(path.format(i,idx),bbox_inches='tight')
-		plt.clf()
-	plt.close()
-np.set_printoptions(suppress=True)
+		fig=plt.figure(figsize=(10,10))
+		plt.plot(j,color=color[0],label='rate {:d}, iter {:d}'.format(i,idx))
+		plt.xlabel('Packet Index')
+		plt.ylabel('One Way Delay(us)')
+		#plt.text(0.5,0.05,'rate {:d}, iteration {:d}'.format(i,idx))
+		plt.savefig(path.format(i,idx)+'.pdf',bbox_inches='tight')
+		plt.savefig(path.format(i,idx)+'.eps',bbox_inches='tight')
+		plt.close(fig)
+
+def pickColor(i,n):
+	cmap=plt.cm.get_cmap('Set1',n)
+	color=cmap(i/(n-1))
+	return color
+np.set_printoptions(suppress=True,precision=2)
+color=[pickColor(i, 10) for i in range(10)]
+matplotlib.rcParams['font.family']='sans-serif'
+matplotlib.rcParams['font.sans-serif']='Arial'
+plt.rcParams.update({'font.size': 6})
+matplotlib.rcParams['hatch.linewidth']=0.3
+marker=['d','.','*','<','p'] #5
+linestyle=[(0,(1,1)),'solid',(0,(5,1)),(0,(3,1,1,1)),(0,(3,1,1,1,1,1))] #5
+hatch=['/','\\','x','o','-|'] #5
+imgDir='/home/tony/Files/available_bandwidth/thesis-svn/IMC2021/BurstQueueRecovery-jintao/images'
+
 capacity=957.14
 if __name__=='__main__':
 	fmt='/data/comparison/exp7/{:d}/{:s}'
@@ -77,8 +92,49 @@ if __name__=='__main__':
 	owd={k:data2OWD(v) for k,v in d.items()}
 	figPath='/images/comparison/exp7/{:d}/{:d}'
 	if False:
-		for i in rateList:
-			savePlot(owd,i,figPath)
+		#for i in rateList:
+		#	savePlot(owd,i,figPath)
+		savePlot(owd,900,figPath)
+
+	fig=plt.figure(figsize=(1.3,1.1))
+	for i,index in enumerate([77,25]):
+		y=owd[900][index]
+		plt.plot(y/1000,label='Case {:d}'.format(i+1),color=color[i],linestyle=linestyle[i])
+	plt.xlabel('Packet Index',labelpad=0)
+	plt.ylabel('One Way Delay(ms)',labelpad=0)
+	plt.xlim(0,200)
+	plt.xticks(np.arange(0,200+1,50))
+	plt.ylim(-0.5,2)
+	plt.yticks(np.arange(0,2+0.1,0.5))
+	plt.legend(loc='upper center',framealpha=.5,ncol=2,labelspacing=0,columnspacing=0.5,handletextpad=0.25,fontsize=5)
+	plt.grid(axis='both',linestyle=(0,(1,1)),linewidth=.1)
+
+	ax=plt.gca()
+	ax.tick_params('both',length=1,width=1,which='both',pad=1)
+
+	plt.savefig('{:s}/exp7-BQR-examples-a.pdf'.format(imgDir),bbox_inches='tight')
+	plt.savefig('{:s}/exp7-BQR-examples-a.eps'.format(imgDir),bbox_inches='tight')
+	plt.close(fig)
+
+	fig=plt.figure(figsize=(1.3,1.1))
+	for i,index in enumerate([6,32]):
+		y=owd[900][index]
+		plt.plot(y/1000,label='Case {:d}'.format(i+3),color=color[i+2],linestyle=linestyle[i+2])
+	plt.xlabel('Packet Index',labelpad=0)
+	plt.ylabel('One Way Delay(ms)',labelpad=0)
+	plt.xlim(0,200)
+	plt.xticks(np.arange(0,200+1,50))
+	plt.ylim(-0.5,5)
+	plt.yticks(np.arange(0,5+0.1,1.0))
+
+	plt.legend(loc='lower center',framealpha=.5,ncol=2,labelspacing=0,columnspacing=0.5,handletextpad=0.25,fontsize=5)
+	plt.grid(axis='both',linestyle=(0,(1,1)),linewidth=.1)
+	ax=plt.gca()
+	ax.tick_params('both',length=1,width=1,which='both',pad=1)
+
+	plt.savefig('{:s}/exp7-BQR-examples-b.pdf'.format(imgDir),bbox_inches='tight')
+	plt.savefig('{:s}/exp7-BQR-examples-b.eps'.format(imgDir),bbox_inches='tight')
+	plt.close(fig)
 	# 有效数量表
 	label=[str(i) for i in rateList]
 	df=pd.DataFrame(validNumber[np.newaxis,:],columns=label)
@@ -127,4 +183,4 @@ if __name__=='__main__':
 			plt.savefig(figPath.format(v),bbox_inches='tight')
 			plt.clf()
 	
-	code.interact(local=dict(globals(),**locals()))
+	#code.interact(local=dict(globals(),**locals()))

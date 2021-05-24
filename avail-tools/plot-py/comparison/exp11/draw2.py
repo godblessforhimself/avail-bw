@@ -66,23 +66,37 @@ def getCurve(v,unit):
 	rate=np.array(packetSum)*8/unit*1e-6
 	return rate
 def draw(x,y1,y2,label1,label2,title):
-	cmap=plt.cm.get_cmap('Set1',10)
-	color=[cmap(i/9) for i in range(10)]
-	fig=plt.figure()
-	plt.plot(x,y1,label=label1,color=color[0])
-	plt.plot(x,y2,label=label2,color=color[1])
-	plt.grid(linestyle = "--")
-	ax=plt.gca()
-	ax.spines['top'].set_visible(False)
-	ax.spines['right'].set_visible(False)
-	plt.legend(loc='best')
-	plt.xlabel('Time(s)')
-	plt.ylabel('Abw(Mbps)')
+	fig=plt.figure(figsize=(3.1,1.1))
+	plt.plot(x,y1,label=label1,color=color[0],linestyle=linestyle[0])
+	plt.plot(x,y2,label=label2,color=color[1],linestyle=linestyle[1])
+	plt.legend(loc='lower center',framealpha=.5,ncol=2,labelspacing=0,columnspacing=0.5,handletextpad=0.25,fontsize=6)
+	plt.grid(axis='both',linestyle=(0,(1,1)),linewidth=.1)
+	plt.xlabel('Time(s)',labelpad=0)
+	plt.ylabel('ABW(Mbps)',labelpad=0)
 	plt.xlim(0,100)
 	plt.xticks(np.arange(0,100+5,10))
-	plt.savefig('/images/comparison/exp11/{:s}.pdf'.format(title),bbox_inches='tight')
-	plt.savefig('/images/comparison/exp11/{:s}.svg'.format(title),bbox_inches='tight')
-	plt.clf()
+	plt.ylim(0,1000)
+	plt.yticks(np.arange(0,1000+1,200))
+	ax=plt.gca()
+	ax.tick_params('both',length=1,width=1,which='both',pad=1)
+	plt.savefig('{:s}/{:s}.pdf'.format(imgDir,title),bbox_inches='tight')
+	plt.savefig('{:s}/{:s}.eps'.format(imgDir,title),bbox_inches='tight')
+	plt.close(fig)
+
+def pickColor(i,n):
+	cmap=plt.cm.get_cmap('Set1',n)
+	color=cmap(i/(n-1))
+	return color
+np.set_printoptions(suppress=True,precision=2)
+color=[pickColor(i, 10) for i in range(10)]
+matplotlib.rcParams['font.family']='sans-serif'
+matplotlib.rcParams['font.sans-serif']='Arial'
+plt.rcParams.update({'font.size': 7})
+matplotlib.rcParams['hatch.linewidth']=0.3
+marker=['d','.','*','<','p'] #5
+linestyle=[(0,(1,1)),'solid',(0,(5,1)),(0,(3,1,1,1)),(0,(3,1,1,1,1,1))] #5
+hatch=['/','\\','x','o','-|'] #5
+imgDir='/home/tony/Files/available_bandwidth/thesis-svn/IMC2021/BurstQueueRecovery-jintao/images'
 
 resultFmt='/data/comparison/exp11/{:s}/result.txt'
 trafficFmt='/data/comparison/exp11/{:s}/c-traffic.len'
@@ -90,8 +104,6 @@ probeFmt='/data/comparison/exp11/{:s}/c-BQR.len'
 names=['test3','test4']
 gran=1.0
 capacity=1000
-matplotlib.rcParams['font.family']='sans-serif'
-matplotlib.rcParams['font.sans-serif']='Arial'
 if __name__=='__main__':
 	tk=tickTock()
 	tk.tick()
@@ -137,5 +149,5 @@ if __name__=='__main__':
 	x=[np.arange(1,maxIndex[i]+1)*gran for i in range(2)]
 	title=['bigFlows','caida']
 	for i in range(2):
-		draw(x[i],bqrPredAgg[i],trafficAgg[i],'BQR','1Gbps minus physical traffic',title[i]+'-{:.2f}'.format(gran))
+		draw(x[i],bqrPredAgg[i],trafficAgg[i],'BQR','GroundTruth',title[i])
 	#code.interact(local=dict(globals(),**locals()))

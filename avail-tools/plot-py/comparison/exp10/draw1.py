@@ -70,7 +70,8 @@ if __name__=='__main__':
 	fig.text(0.09,0.5,'OWD(us)',va='center',rotation='vertical')
 	fig.text(0.5,0.05,'Packet index',va='center',rotation='horizontal')
 	plt.subplots_adjust(wspace=0,hspace=0)
-	plt.savefig('/images/comparison/exp10/run1-exp10.svg',bbox_inches='tight')
+	plt.savefig('/images/comparison/exp10/run1-exp10.eps',bbox_inches='tight')
+	plt.savefig('/images/comparison/exp10/run1-exp10.png',bbox_inches='tight')
 	plt.savefig('/images/comparison/exp10/run1-exp10.pdf',bbox_inches='tight')
 	o=owd[1][1]
 	s=rescale(d[1][1,:,0])

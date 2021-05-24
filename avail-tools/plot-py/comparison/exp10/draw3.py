@@ -51,33 +51,56 @@ def getOWD(x):
 	r-=np.min(r,axis=1)[:,np.newaxis]
 	return r
 fmt='/data/comparison/exp10/run3-{:d}/timestamp.txt'
-rateList=[0,1000,3000,5000,7000,9000]
+rateList=[1000,3000,5000,7000]
+
+def pickColor(i,n):
+	cmap=plt.cm.get_cmap('Set1',n)
+	color=cmap(i/(n-1))
+	return color
+np.set_printoptions(suppress=True,precision=2)
+color=[pickColor(i, 10) for i in range(10)]
 matplotlib.rcParams['font.family']='sans-serif'
 matplotlib.rcParams['font.sans-serif']='Arial'
+plt.rcParams.update({'font.size': 9})
+matplotlib.rcParams['hatch.linewidth']=0.3
+marker=['d','.','*','<','p'] #5
+linestyle=[(0,(1,1)),'solid',(0,(5,1)),(0,(3,1,1,1)),(0,(3,1,1,1,1,1))] #5
+hatch=['/','\\','x','o','-|'] #5
+imgDir='/home/tony/Files/available_bandwidth/thesis-svn/IMC2021/BurstQueueRecovery-jintao/images'
+
 if __name__=='__main__':
 	tk=tickTock()
 	d=[loadWrapper(fmt.format(i)) for i in rateList]
 	owd=[getOWD(i) for i in d]
 	tk.tock()
 	rescale=lambda x:(x-x[0])*1e6
-	fig,axs=plt.subplots(2,3,sharex=True,sharey=True,figsize=(15,5))
+	fig,ax=plt.subplots(figsize=(3.4,1.1))
 	j=-1
+	label=['{:.0f} Gbps'.format(v/1000) for v in rateList]
 	for i,v in enumerate(rateList):
-		ax=axs[i//3][i%3]
-		#ax.plot(owd[i][1],marker='.')
-		ax.plot(rescale(d[i][j,:,0]/1000),owd[i][j],marker='.')
-		ax.text(0.6,0.9,'traffic rate:{:.0f}Gbps'.format(v/1000),transform=ax.transAxes)
-		ax.grid(linestyle='--')
-	fig.text(0.09,0.5,'OWD(us)',va='center',rotation='vertical')
-	fig.text(0.5,0.05,'Time(ms)',va='center',rotation='horizontal')
-	plt.subplots_adjust(wspace=0,hspace=0)
-	plt.savefig('/images/comparison/exp10/run3-exp10.svg',bbox_inches='tight')
-	plt.savefig('/images/comparison/exp10/run3-exp10.pdf',bbox_inches='tight')
-	plt.show()
+		ax.plot(owd[i][j],color=color[i],label=label[i],linestyle=linestyle[i])
+	
+	plt.xlabel('Packet Index',labelpad=0)
+	plt.ylabel('One Way Delay(us)',labelpad=0)
+	plt.xlim(0,35)
+	plt.xticks(np.arange(0,35,10))
+	plt.ylim(-10,120)
+	plt.yticks(np.arange(0,120,20))
+
+	plt.legend(loc='upper right',framealpha=.5,ncol=1,labelspacing=0,columnspacing=0.5,handletextpad=0.25,fontsize=8)
+
+	plt.grid(axis='both',linestyle=(0,(1,1)),linewidth=.1)
+
+	ax=plt.gca()
+	ax.tick_params('both',length=1,width=1,which='both',pad=1)
+
+	plt.savefig('{:s}/run3-exp10.eps'.format(imgDir),bbox_inches='tight')
+	plt.savefig('{:s}/run3-exp10.pdf'.format(imgDir),bbox_inches='tight')
+	#plt.show()
 	i,j=-1,-1
 	o=owd[i][j]
 	s=rescale(d[i][j,:,0])
 	r=rescale(d[i][j,:,1])
 	gin=s[1:]-s[:-1]
 	gout=r[1:]-r[:-1]
-	code.interact(local=dict(globals(),**locals()))
+	#code.interact(local=dict(globals(),**locals()))

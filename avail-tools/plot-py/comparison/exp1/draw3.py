@@ -1,4 +1,4 @@
-# 实验一，平均测量时间
+# 实验一，Queue Length
 # 片段划分
 # ASSOLO：使用1ms的阈值，最后两个包无用
 # spruce的测量时间其实是任意的
@@ -11,8 +11,7 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import code,time,os
-np.set_printoptions(suppress=True)
+import code,time,os,matplotlib
 delta=lambda a: a[...,1:]-a[...,:-1]
 rates=range(0,900+1,100)
 x=[i for i in rates]
@@ -160,8 +159,16 @@ def pickColor(i,n):
 	cmap=plt.cm.get_cmap('Set1',n)
 	color=cmap(i/(n-1))
 	return color
+np.set_printoptions(suppress=True,precision=2)
 color=[pickColor(i, 10) for i in range(10)]
-plt.rcParams.update({'font.size': 15})
+matplotlib.rcParams['font.family']='sans-serif'
+matplotlib.rcParams['font.sans-serif']='Arial'
+plt.rcParams.update({'font.size':6})
+matplotlib.rcParams['hatch.linewidth']=0.3
+marker=['d','.','*','<','p'] #5
+linestyle=[(0,(1,1)),'solid',(0,(5,1)),(0,(3,1,1,1)),(0,(3,1,1,1,1,1))] #5
+hatch=['/','\\','x','o','-|'] #5
+imgDir='/home/tony/Files/available_bandwidth/thesis-svn/IMC2021/BurstQueueRecovery-jintao/images'
 
 if __name__=='__main__':
 	begin=time.time()
@@ -219,6 +226,21 @@ if __name__=='__main__':
 	df=pd.DataFrame(averageSecNum,index=index,columns=label)
 	df.index.name='Traffic Settings(Mbps)'
 	df.to_csv('/data/comparison/exp1-time/exp1-sectionNumber.csv',float_format='%.2f')
+	# num of iterations
+	fig,ax=plt.subplots(figsize=(1.3,1.1))
+	for idx in [2,3]:
+		plt.plot(truth[:10],averageSecNum[:10,idx],label=label[idx],linestyle=linestyle[idx],color=color[idx])
+	plt.legend(loc='best',framealpha=.5,ncol=5,labelspacing=0,columnspacing=0.5,handletextpad=0.25,fontsize=5)
+	plt.xlabel('ABW(Mbps)',labelpad=0)
+	plt.ylabel('Iteration Number',labelpad=0)
+	plt.grid(axis='both',linestyle=(0,(1,1)),linewidth=.1)
+
+	ax=plt.gca()
+	ax.tick_params('both',length=1,width=1,which='both',pad=1)
+	plt.savefig('{:s}/exp1-iteration-number.pdf'.format(imgDir),bbox_inches='tight')
+	plt.savefig('{:s}/exp1-iteration-number.eps'.format(imgDir),bbox_inches='tight')
+	plt.show()
+	plt.close(fig)
 	# 平均每段测量时间 sectionTime (13,4,sec)
 	avgSecTime=[]
 	for i in range(N):
@@ -286,40 +308,41 @@ if __name__=='__main__':
 	end=time.time()
 	print('{:.2f}'.format(end-begin))
 	# 以可用带宽为横坐标，平均/最大长度为纵坐标的折线图；可用带宽为大、中、小时的包数、字节数表格
-	fig=plt.figure(figsize=(10,10))
+	fig=plt.figure(figsize=(1.3,1.1))
 	N=len(rates)
 	meanQueueLength=np.array(meanQueueLength)
-	marker=['.','o','v','^','<','>']
 	for j in range(M):
-		plt.plot(truth[:N],meanQueueLength[:N,j],label=label[j],color=color[j],marker=marker[j])
-	plt.legend()
-	plt.grid(axis='both',linestyle="--")
-	plt.xticks(np.arange(0,1000,100))
-	plt.xlabel('ABW(Mbps)')
-	plt.ylabel('Mean Queue Length(number of MTU packets)')
+		plt.plot(truth[:N],meanQueueLength[:N,j],label=label[j],color=color[j],linestyle=linestyle[j])
+	plt.legend(loc='upper right',framealpha=.5,labelspacing=0,columnspacing=0.5,handletextpad=0.25,fontsize=5)
+	plt.grid(axis='both',linestyle=(0,(1,1)),linewidth=.1)
+	plt.xticks(np.arange(0,1000,200))
+	plt.ylim(0,50)
+	plt.yticks(np.arange(0,50+1,10))
+	plt.xlabel('ABW(Mbps)',labelpad=0)
+	plt.ylabel('Mean Queue Length(pkts)',labelpad=0)
 	ax=plt.gca()
-	ax.spines['top'].set_visible(False)
-	ax.spines['right'].set_visible(False)
-	plt.savefig('/images/comparison/exp1/exp1-MeanQueueLength.pdf',bbox_inches='tight')
-	plt.savefig('/images/comparison/exp1/exp1-MeanQueueLength.eps',bbox_inches='tight')
+	ax.tick_params('both',length=1,width=1,which='both',pad=1)
+	plt.savefig('{:s}/exp1-MeanQueueLength.pdf'.format(imgDir),bbox_inches='tight')
+	plt.savefig('{:s}/exp1-MeanQueueLength.eps'.format(imgDir),bbox_inches='tight')
 	plt.close(fig)
 	# Max queue length
-	fig=plt.figure(figsize=(10,10))
+	fig=plt.figure(figsize=(1.3,1.1))
 	N=len(rates)
 	maxQueueLength=np.array(maxQueueLength)
-	marker=['.','o','v','^','<','>']
 	for j in range(M):
-		plt.plot(truth[:N],maxQueueLength[:N,j],label=label[j],color=color[j],marker=marker[j])
-	plt.legend()
-	plt.grid(axis='both',linestyle="--")
-	plt.xticks(np.arange(0,1000,100))
-	plt.xlabel('ABW(Mbps)')
-	plt.ylabel('Max Queue Length(number of MTU packets)')
+		y=maxQueueLength[:N,j]
+		plt.plot(truth[:N],y,label=label[j],color=color[j],linestyle=linestyle[j])
+	plt.legend(loc='upper right',framealpha=.5,labelspacing=0,columnspacing=0.5,handletextpad=0.25,fontsize=5)
+	plt.grid(axis='both',linestyle=(0,(1,1)),linewidth=.1)
+	plt.xticks(np.arange(0,1000,200))
+	plt.ylim(0,120)
+	plt.yticks(np.arange(0,120+1,20))
+	plt.xlabel('ABW(Mbps)',labelpad=0)
+	plt.ylabel('Max Queue Length(pkts)',labelpad=0)
 	ax=plt.gca()
-	ax.spines['top'].set_visible(False)
-	ax.spines['right'].set_visible(False)
-	plt.savefig('/images/comparison/exp1/exp1-MaxQueueLength.pdf',bbox_inches='tight')
-	plt.savefig('/images/comparison/exp1/exp1-MaxQueueLength.eps',bbox_inches='tight')
+	ax.tick_params('both',length=1,width=1,which='both',pad=1)
+	plt.savefig('{:s}/exp1-MaxQueueLength.pdf'.format(imgDir),bbox_inches='tight')
+	plt.savefig('{:s}/exp1-MaxQueueLength.eps'.format(imgDir),bbox_inches='tight')
 	plt.close(fig)
 	# 可用带宽为957/557/57时的MaxQueueLength和MaxQueueMB
 	ABWIndex=[1,4,9]

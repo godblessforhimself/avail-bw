@@ -1,3 +1,46 @@
+#### 今日计划
+改图：
+BQR framework & algorithm
+iperf3 vs D-ITG
+BQR in 10Gbps
+#### fig
+width=3.2cm
+height=2.4cm
+双栏绘制三副图：
+3 x 2.0x1.3
+fontsize 7
+单栏一副图：
+3.4x1.1 
+fontsize 9-6
+单栏两幅图
+2x1.3x1.1
+fontsize 6
+#### common header
+def pickColor(i,n):
+	cmap=plt.cm.get_cmap('Set1',n)
+	color=cmap(i/(n-1))
+	return color
+np.set_printoptions(suppress=True,precision=2)
+color=[pickColor(i, 10) for i in range(10)]
+matplotlib.rcParams['font.family']='sans-serif'
+matplotlib.rcParams['font.sans-serif']='Arial'
+plt.rcParams.update({'font.size':7})
+matplotlib.rcParams['hatch.linewidth']=0.3
+marker=['d','.','*','<','p'] #5
+linestyle=[(0,(1,1)),'solid',(0,(5,1)),(0,(3,1,1,1)),(0,(3,1,1,1,1,1))] #5
+hatch=['/','\\','x','o','-|'] #5
+imgDir='/home/tony/Files/available_bandwidth/thesis-svn/IMC2021/BurstQueueRecovery-jintao/images'
+
+plot(x,y,color=color[i],linestyle=linestyle[i],marker=marker[i],markersize=12)
+plt.bar(x,height+10,bottom=-10,width=width,label=label[i],edgecolor=color[i],hatch=hatch[i]*5,fill=False,linewidth=.5)
+
+plt.legend(loc='upper center',framealpha=.5,ncol=5,labelspacing=0,columnspacing=0.5,handletextpad=0.25,fontsize=5)
+plt.grid(axis='both',linestyle=(0,(1,1)),linewidth=.1)
+ax=plt.gca()
+ax.tick_params('both',length=1,width=1,which='both',pad=1)
+plt.xlabel('',labelpad=0)
+plt.ylabel('',labelpad=0)
+
 ####
 1. Loss related mechanism RED WRED
 2. Buffer related mechanism Router buffer policy

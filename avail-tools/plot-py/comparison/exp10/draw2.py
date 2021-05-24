@@ -71,7 +71,8 @@ if __name__=='__main__':
 	fig.text(0.09,0.5,'OWD(us)',va='center',rotation='vertical')
 	fig.text(0.5,0.05,'Time(ms)',va='center',rotation='horizontal')
 	plt.subplots_adjust(wspace=0,hspace=0)
-	plt.savefig('/images/comparison/exp10/run2-exp10.svg',bbox_inches='tight')
+	plt.savefig('/images/comparison/exp10/run2-exp10.eps',bbox_inches='tight')
+	plt.savefig('/images/comparison/exp10/run2-exp10.png',bbox_inches='tight')
 	plt.savefig('/images/comparison/exp10/run2-exp10.pdf',bbox_inches='tight')
 	i,j=-1,0
 	o=owd[i][j]
@@ -79,4 +80,4 @@ if __name__=='__main__':
 	r=rescale(d[i][j,:,1])
 	gin=s[1:]-s[:-1]
 	gout=r[1:]-r[:-1]
-	code.interact(local=dict(globals(),**locals()))
+	#code.interact(local=dict(globals(),**locals()))

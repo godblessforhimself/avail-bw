@@ -2,12 +2,21 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import code,io
+import code,io,matplotlib
 from matplotlib.patches import Rectangle
 abnormal1='/data/comparison/exp3/900-20-900/BQR/timestamp.txt'
 abnormal2='/data/comparison/exp3/400-20-900/BQR/timestamp.txt'
 original='/data/comparison/exp1/900-900-900/BQR/timestamp.txt'
-np.set_printoptions(suppress=True)
+def pickColor(i,n):
+	cmap=plt.cm.get_cmap('Set1',n)
+	color=cmap(i/(n-1))
+	return color
+np.set_printoptions(suppress=True,precision=2)
+color=[pickColor(i, 10) for i in range(10)]
+matplotlib.rcParams['font.family']='sans-serif'
+matplotlib.rcParams['font.sans-serif']='Arial'
+plt.rcParams.update({'font.size': 15})
+marker=['.','o','v','^','<','>','+','x','D','|']
 def loadTime(tsfile):
 	data=[]
 	f=open(tsfile)
@@ -43,23 +52,31 @@ if __name__=='__main__':
 	time2=relativeTime(data2)
 	time3=relativeTime(data3)
 	rectx,recty,rectw,recth=181,-15,200-181+.5,130+200
-	fig,axs=plt.subplots(nrows=1,ncols=2,figsize=(20,10))
-	ax=axs[0]
-	ax.plot(time1[-1],owd1[-1],'.-',label='900-900(1000)-900')
-	ax.plot(time2[2],owd2[2],'.-',label='900-20(100)-900')
-	ax.plot(time3[3],owd3[3],'.-',label='400-20(100)-900')
+
+	fig=plt.figure(figsize=(10,10))
+	ax=plt.gca()
+	ax.plot(time1[-1],owd1[-1],marker=marker[0],color=color[0],label='900-900(1000)-900')
+	ax.plot(time2[2],owd2[2],marker=marker[1],color=color[1],label='900-20(100)-900')
+	ax.plot(time3[3],owd3[3],marker=marker[2],color=color[2],label='400-20(100)-900')
 	ax.legend()
-	ax.grid()
-	ax=axs[1]
+	ax.grid(linestyle='--')
+	plt.xlabel('Time(ms)')
+	plt.ylabel('OWD(us)')
+	plt.savefig('/images/comparison/exp3/exp3-OWD-time-full.pdf',bbox_inches='tight')
+	plt.savefig('/images/comparison/exp3/exp3-OWD-time-full.eps',bbox_inches='tight')
+	plt.close(fig)
+
+	fig=plt.figure(figsize=(10,10))
+	ax=plt.gca()
 	beginIdx=160
-	ax.plot(time1[-1][beginIdx:],owd1[-1][beginIdx:],'.-',label='900-900(1000)-900')
-	ax.plot(time2[2][beginIdx:],owd2[2][beginIdx:],'.-',label='900-20(100)-900')
-	ax.plot(time3[3][beginIdx:],owd3[3][beginIdx:],'.-',label='400-20(100)-900')
+	ax.plot(time1[-1][beginIdx:],owd1[-1][beginIdx:],marker=marker[0],color=color[0],label='900-900(1000)-900')
+	ax.plot(time2[2][beginIdx:],owd2[2][beginIdx:],marker=marker[1],color=color[1],label='900-20(100)-900')
+	ax.plot(time3[3][beginIdx:],owd3[3][beginIdx:],marker=marker[2],color=color[2],label='400-20(100)-900')
 	ax.legend()
 	ax.grid()
-	fig.suptitle('The influence of capacity on noise',y=0.92)
-	fig.text(0.05,0.5,'OWD(us)',va='center',rotation='vertical')
-	fig.text(0.5,0.05,'relative time(us)',va='center',rotation='horizontal')
-	plt.savefig('/images/comparison/exp3/relative-time.png',bbox_inches='tight')
+	plt.xlabel('Time(ms)')
+	plt.ylabel('OWD(us)')
+	plt.savefig('/images/comparison/exp3/exp3-OWD-time-part.pdf',bbox_inches='tight')
+	plt.savefig('/images/comparison/exp3/exp3-OWD-time-part.eps',bbox_inches='tight')
 	plt.close(fig)
 	#code.interact(local=dict(globals(),**locals()))

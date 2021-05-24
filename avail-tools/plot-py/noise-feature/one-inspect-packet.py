@@ -1,9 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
-import code,time
+import code,time,matplotlib
 delta=lambda x: x[1:]-x[:-1]
-np.set_printoptions(suppress=True)
-
 def key(d,i):
 	return '{} {}'.format(d,i)
 def plot(durations,u,idx,label):
@@ -28,7 +26,6 @@ def plot(durations,u,idx,label):
 	fig.text(0.07,0.5,'user-physical(us)',va='center',rotation='vertical')
 	plt.savefig('/images/noise-feature/one-inspect-packet/{}.png'.format(idx),bbox_inches='tight')
 	plt.close(fig)
-
 def plotDenoise(durations,u,idx):
 	label=['recv(IC disabled,Raw)','recv(IC disabled,Denoised)','recv(IC enabled,Raw)','recv(IC enabled,Denoised)']
 	fig,axs=plt.subplots(nrows=len(durations),ncols=4,sharex=True,sharey=True,figsize=(10,100))
@@ -52,7 +49,20 @@ def plotDenoise(durations,u,idx):
 	fig.text(0.07,0.5,'user-physical(us)',va='center',rotation='vertical')
 	plt.savefig('/images/noise-feature/one-inspect-packet/denoise-{}.png'.format(idx),bbox_inches='tight')
 	plt.close(fig)
-
+def pickColor(i,n):
+	cmap=plt.cm.get_cmap('Set1',n)
+	color=cmap(i/(n-1))
+	return color
+np.set_printoptions(suppress=True,precision=2)
+color=[pickColor(i, 10) for i in range(10)]
+matplotlib.rcParams['font.family']='sans-serif'
+matplotlib.rcParams['font.sans-serif']='Arial'
+plt.rcParams.update({'font.size':7})
+matplotlib.rcParams['hatch.linewidth']=0.3
+marker=['d','.','*','<','p'] #5
+linestyle=[(0,(1,1)),'solid',(0,(5,1)),(0,(3,1,1,1)),(0,(3,1,1,1,1,1))] #5
+hatch=['/','\\','x','o','-|'] #5
+imgDir='/home/tony/Files/available_bandwidth/thesis-svn/IMC2021/BurstQueueRecovery-jintao/images'
 if __name__=='__main__':
 	# send-real(IC disabled, IC enabled); recv-real(IC-disabled,IC enables)
 	# duration 1200 - 12000
@@ -69,72 +79,152 @@ if __name__=='__main__':
 	for duration in durations:
 		for ic in range(2):
 			s=key(duration,ic)
-			temp=np.loadtxt(sendFile.format(duration,ic))[:,0]*1e6
+			temp=np.loadtxt(sendFile.format(duration,ic))[:,0]
 			sendReal.append(temp.reshape((repeat,n)))
-			temp=np.loadtxt(recvFile.format(duration,ic))[:,0]*1e6
+			temp=np.loadtxt(recvFile.format(duration,ic))[:,0]
 			recvReal.append(temp.reshape((repeat,n)))
-			temp=np.loadtxt(bqrFile.format(duration,ic),delimiter=',')*1e6
+			temp=np.loadtxt(bqrFile.format(duration,ic),delimiter=',')
 			send.append(temp[:,0].reshape((repeat,n)))
 			recv.append(temp[:,1].reshape((repeat,n)))
 	end=time.time()
 	print('time {:.2f}'.format(end-begin))
-	#(duration*ic,repeat,n)
-	send=np.array(send)
-	recv=np.array(recv)
-	sendReal=np.array(sendReal)
-	recvReal=np.array(recvReal)
+	#(duration,ic,repeat,n)
+	send=np.array(send).reshape((len(durations),2,repeat,n))
+	recv=np.array(recv).reshape((len(durations),2,repeat,n))
+	owd=recv-send
+	sendReal=np.array(sendReal).reshape((len(durations),2,repeat,n))
+	recvReal=np.array(recvReal).reshape((len(durations),2,repeat,n))
+	owdReal=recvReal-sendReal
 	ds=send-sendReal
-	ds=ds-np.mean(ds,axis=2).reshape((-1,repeat,1))
+	ds=ds-np.mean(ds,axis=3)[:,:,:,np.newaxis]
 	dr=recv-recvReal
-	dr=dr-np.mean(dr,axis=2).reshape((-1,repeat,1))
+	dr=dr-np.mean(dr,axis=3)[:,:,:,np.newaxis]
 	loadNumber=100
 	inspectNumber=100
-	# 发送负载长度误差在第一个包
-	x=send[:,:,100-1]-send[:,:,0]
-	y=sendReal[:,:,100-1]-sendReal[:,:,0]
-	gapx=send[:,:,1:]-send[:,:,:-1]
-	gapy=sendReal[:,:,1:]-sendReal[:,:,:-1]
-	error=np.mean((y-x)**2)
-	z=send[:,:,100-1]-send[:,:,1]
-	z=z+np.mean(gapx[:,:,1:99],axis=2)
-	error2=np.mean((y-z)**2)
-	print('发送负载误差 {:.2f} 舍去第一个包间隔 {:.2f}'.format(error,error2))
-	# 发送检查长度误差很小
-	x=send[:,:,loadNumber+inspectNumber-1]-send[:,:,loadNumber-1]
-	y=sendReal[:,:,loadNumber+inspectNumber-1]-sendReal[:,:,loadNumber-1]
-	error=np.mean((y-x)**2)
-	print('发送检查误差 {:.2f}'.format(error))
-	# 接收负载长度误差
-	x=recv[:,:,100-1]-recv[:,:,0]
-	y=recvReal[:,:,100-1]-recvReal[:,:,0]
-	gapx=recv[:,:,1:100]-recv[:,:,:100-1]
-	idxGap=np.argsort(gapx,axis=2)
-	error=np.mean((y-x)**2)
-	thres=(recv[:,:,100-1]-recv[:,:,0])/99
-	z=[]	
-	for i in range(len(durations)*2):
-		for j in range(repeat):
-			idx=np.where(gapx[i,j,:]>=thres[i,j])[0]
-			left=idx[0]
-			right=idx[-1]
-			v=(loadNumber-1)*(recv[i,j,right]-recv[i,j,left])/(right-left)
-			#print('{} {} {}'.format(left,right,v))
-			z.append(v)
-	z=np.array(z).reshape((-1,repeat))
-	error2=np.mean((y-z)**2)
-	print('接收负载误差 {:.2f} 校准后误差 {:.2f}'.format(error,error2))
-	# 接收检查长度误差
-	left,right=loadNumber-1,loadNumber+inspectNumber
-	x=recv[1::2,:,right-1]-recv[1::2,:,left]
-	y=recvReal[1::2,:,right-1]-recvReal[1::2,:,left]
-	gapx=recv[1::2,:,left+1:right]-recv[1::2,:,left:right-1]
-	gapy=recvReal[1::2,:,left+1:right]-recvReal[1::2,:,left:right-1]
-	d=x-y
-	lim=25
-	x=x[:lim,:]
-	y=y[:lim,:]
-	error=np.mean((y-x)**2)
-	print('接收检查误差 {:.2f}'.format(error))
+	# OWD user & real
+	'''
+	for i,duration in enumerate(durations):
+		for ic in range(2):
+			for r in range(repeat):
+				y1=owd[i,ic,r,:]*1e6
+				y2=owdReal[i,ic,r,:]*1e6
+				y1=y1-np.mean(y1)+np.mean(y2)
+				fig,ax=plt.subplots(figsize=(10,10))
+				plt.plot(y1,label='User Time',color=color[0],linestyle=linestyle[0])
+				plt.plot(y2,label='Real Time',color=color[1],linestyle=linestyle[1])
+				plt.legend(loc='upper left',framealpha=.5,ncol=1,labelspacing=0,columnspacing=0.5,handletextpad=0.25,fontsize=5)
+				plt.grid(axis='both',linestyle=(0,(1,1)),linewidth=.1)
+				ax.tick_params('both',length=1,width=1,which='both',pad=1)
+				plt.xlabel('Packet Index',labelpad=0)
+				plt.ylabel('One Way Delay(us)',labelpad=0)
+				plt.savefig('/images/noise-feature/OWD/{}-{}-{}.png'.format(duration,ic,r),bbox_inches='tight')
+				plt.close(fig)
+	end=time.time()
+	print('time {:.2f}'.format(end-begin))
+	# send-sendReal 
+	for i,duration in enumerate(durations):
+		for ic in range(2):
+			for r in range(repeat):
+				y1=send[i,ic,r,:]
+				y2=sendReal[i,ic,r,:]
+				y=y1-y2
+				y=(y-np.mean(y))*1e6
+				fig,ax=plt.subplots(figsize=(10,10))
+				plt.plot(y,label='xxx',color=color[0],linestyle=linestyle[0])
+				plt.legend(loc='upper left',framealpha=.5,ncol=1,labelspacing=0,columnspacing=0.5,handletextpad=0.25,fontsize=5)
+				plt.grid(axis='both',linestyle=(0,(1,1)),linewidth=.1)
+				ax.tick_params('both',length=1,width=1,which='both',pad=1)
+				plt.xlabel('Packet Index',labelpad=0)
+				plt.ylabel('Send Time(us)',labelpad=0)
+				plt.savefig('/images/noise-feature/sendtime/{}-{}-{}.png'.format(duration,ic,r),bbox_inches='tight')
+				plt.close(fig)
+	end=time.time()
+	print('time {:.2f}'.format(end-begin))
+	# recv-recvReal
+	for i,duration in enumerate(durations):
+		for ic in range(2):
+			for r in range(repeat):
+				y1=recv[i,ic,r,:]
+				y2=recvReal[i,ic,r,:]
+				y=y1-y2
+				y=(y-np.mean(y))*1e6
+				fig,ax=plt.subplots(figsize=(10,10))
+				plt.plot(y,label='x',color=color[0],linestyle=linestyle[0])
+				plt.legend(loc='upper left',framealpha=.5,ncol=1,labelspacing=0,columnspacing=0.5,handletextpad=0.25,fontsize=5)
+				plt.grid(axis='both',linestyle=(0,(1,1)),linewidth=.1)
+				ax.tick_params('both',length=1,width=1,which='both',pad=1)
+				plt.xlabel('Packet Index',labelpad=0)
+				plt.ylabel('Recv Time(us)',labelpad=0)
+				plt.savefig('/images/noise-feature/recvtime/{}-{}-{}.png'.format(duration,ic,r),bbox_inches='tight')
+				plt.close(fig)
+	'''
+	# 将duration=2000,114000,198000;ic=0,1;r=0的绘制出来
+	targets=[2000,114000,198000]
+	for i,duration in enumerate(durations):
+		if duration in targets:
+			for ic in range(2):
+				r=0
+				y1=owd[i,ic,r,:]*1e6
+				y2=owdReal[i,ic,r,:]*1e6
+				y1=y1-np.mean(y1)+np.mean(y2)
+				fig,ax=plt.subplots(figsize=(1.3,1.1))
+				x=np.arange(len(y1))
+				plt.scatter(x,y1,s=1,label='User Time',color=color[0])
+				#plt.plot(y1,label='User Time',color=color[0],linestyle=linestyle[0])
+				plt.plot(y2,label='Real Time',color=color[1],linestyle=linestyle[1])
+				plt.xlim(-10,210)
+				plt.xticks(np.arange(0,200+1,40))
+				plt.ylim(0,650)
+				plt.yticks(np.arange(0,600+1,100))
+				plt.legend(loc='upper center',framealpha=.5,ncol=2,labelspacing=0,columnspacing=0.5,handletextpad=0.25,fontsize=4)
+				plt.grid(axis='both',linestyle=(0,(1,1)),linewidth=.1)
+				ax.tick_params('both',length=1,width=1,which='both',pad=1)
+				plt.xlabel('Packet Index',labelpad=0)
+				plt.ylabel('One Way Delay(us)',labelpad=0)
+				plt.savefig('{:s}/noise-OWD-{}-{}.pdf'.format(imgDir,duration,ic),bbox_inches='tight')
+				plt.close(fig)
+	for i,duration in enumerate(durations):
+		if duration in targets:
+			for ic in range(2):
+				r=0
+				y1=send[i,ic,r,:]
+				y2=sendReal[i,ic,r,:]
+				y=y1-y2
+				y=(y-np.mean(y))*1e6
+				fig,ax=plt.subplots(figsize=(1.3,1.1))
+				x=np.arange(len(y))
+				plt.scatter(x,y,s=1,color=color[0])
+				plt.grid(axis='both',linestyle=(0,(1,1)),linewidth=.1)
+				ax.tick_params('both',length=1,width=1,which='both',pad=1)
+				plt.xlim(-10,210)
+				plt.xticks(np.arange(0,200+1,40))
+				plt.ylim(-60,60)
+				plt.yticks(np.arange(-60,60+1,20))
+				plt.xlabel('Packet Index',labelpad=0)
+				plt.ylabel('Send(User - Real) (us)',labelpad=0)
+				plt.savefig('{:s}/noise-sendtime-{}-{}.pdf'.format(imgDir,duration,ic),bbox_inches='tight')
+				plt.close(fig)
+	for i,duration in enumerate(durations):
+		if duration in targets:
+			for ic in range(2):
+				r=0
+				y1=recv[i,ic,r,:]
+				y2=recvReal[i,ic,r,:]
+				y=y1-y2
+				y=(y-np.mean(y))*1e6
+				fig,ax=plt.subplots(figsize=(1.3,1.1))
+				x=np.arange(len(y))
+				plt.scatter(x,y,s=1,color=color[0])
+				plt.grid(axis='both',linestyle=(0,(1,1)),linewidth=.1)
+				ax.tick_params('both',length=1,width=1,which='both',pad=1)
+				plt.xlim(-10,210)
+				plt.xticks(np.arange(0,200+1,40))
+				#plt.ylim(-60,60)
+				#plt.yticks(np.arange(-60,60+1,20))
+				plt.xlabel('Packet Index',labelpad=0)
+				plt.ylabel('Recv(User-Real) (us)',labelpad=0)
+				plt.savefig('{:s}/noise-recvtime-{}-{}.pdf'.format(imgDir,duration,ic),bbox_inches='tight')
+				plt.close(fig)
 	end=time.time()
 	print('time {:.2f}'.format(end-begin))
 	#code.interact(local=dict(globals(),**locals()))
